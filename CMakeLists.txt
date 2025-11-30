@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.10)
+project(Molbit C)
+set(CMAKE_C_STANDARD)
+include_directories("$ENV{HOME}/.local/include")
+file(GLOB SOURCES "src/*.c")
+add_executable(main ${SOURCES})
