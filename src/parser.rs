@@ -1,3 +1,5 @@
+use std::env::current_exe;
+
 use crate::token::Token;
 
 #[derive(Debug)]
@@ -22,9 +24,16 @@ pub struct Parser {
 }
 
 impl Parser {
-    // pub fn parse_program(&mut self) -> Result<Statement, ParserError> {
+    pub fn parse_program(&mut self) -> Result<Vec<Statement>, ParserError> {
+        let mut statements = Vec::new();
 
-    // }
+        while self.index < self.tokens.len() {
+            let current_statement = self.parse_statement()?;
+            statements.push(current_statement);
+        }
+
+        return Ok(statements);
+    }
 
     pub fn parse_statement(&mut self) -> Result<Statement, ParserError> {
         match self.peek_token(0) {

@@ -8,7 +8,7 @@ use crate::parser::Parser;
 
 fn main() {
     let mut lexer = Lexer {
-        input: String::from("return 67;"),
+        input: String::from("return 67;\nreturn 0;"),
         index: 0
     };
 
@@ -25,6 +25,6 @@ fn main() {
         index: 0
     };
 
-    let statements = parser.parse_statement().unwrap();
+    let statements = parser.parse_program().unwrap();
     println!("\nStatements:\n{:?}", statements);
 }
