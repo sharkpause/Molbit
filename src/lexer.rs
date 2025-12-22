@@ -77,7 +77,6 @@ impl Lexer {
                 return Err(LexerError::GenericError);
             }
         } else if current_char == ';' {
-            token.push(current_char);
             self.consume_char();
 
             return Ok(Token::Semicolon);
