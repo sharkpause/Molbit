@@ -33,6 +33,27 @@ impl Lexer {
         }
     }
 
+    fn single_char_token(&mut self) -> Option<Token> {
+        let character = self.peek_char(0)?;
+
+        let token = match character {
+            '(' => Token::LeftParentheses,
+            ')' => Token::RightParentheses,
+            '{' => Token::LeftBrace,
+            '}' => Token::RightBrace,
+            ';' => Token::Semicolon,
+            '+' => Token::Plus,
+            '-' => Token::Minus,
+            '*' => Token::Star,
+            '/' => Token::Slash,
+            _ => return None,
+        };
+
+        self.consume_char();
+        
+        return Some(token);
+    }
+
     pub fn next_token(&mut self) -> Result<Token, LexerError> {
         self.skip_whitespace();
 
@@ -77,22 +98,10 @@ impl Lexer {
                 "int" => Ok(Token::IntType),
                 _ => Ok(Token::Identifier(token))
             }
-        } else if current_char == '(' {
-            self.consume_char();
-            return Ok(Token::LeftParentheses);
-        } else if current_char == ')' {
-            self.consume_char();
-            return Ok(Token::RightParentheses);
-        } else if current_char == '{' {
-            self.consume_char();
-            return Ok(Token::LeftBrace);
-        } else if current_char == '}' {
-            self.consume_char();
-            return Ok(Token::RightBrace);
-        } else if current_char == ';' {
-            self.consume_char();
-            return Ok(Token::Semicolon);
         } else {
+            if let Some(token) = self.single_char_token() {
+                return Ok(token);
+            }
             return Err(LexerError::GenericError);
         }
     }
