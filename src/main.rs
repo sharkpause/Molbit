@@ -3,7 +3,7 @@ mod lexer;
 mod parser;
 mod codegen;
 
-use std::{env, fs};
+use std::{env, fs, process::Command};
 
 use crate::token::print_token;
 use crate::lexer::Lexer;
@@ -19,6 +19,28 @@ fn read_file(path: &String) -> String {
 
 fn write_file(path: String, contents: &String) {
     fs::write(path, contents).expect("Failed to write assembly");
+}
+
+fn assemble_and_link(asm_path: &str, output_exe: &str) {
+    let nasm_status = Command::new("nasm")
+        .args(&["-f", "elf64", asm_path, "-o", "out.o"])
+        .status()
+        .expect("Failed to run NASM");
+
+    if !nasm_status.success() {
+        panic!("Assembling failed");
+    }
+
+    let ld_status = Command::new("ld")
+        .args(&["out.o", "-o", output_exe])
+        .status()
+        .expect("Failed to run LD");
+
+    if !ld_status.success() {
+        panic!("Linking failed");
+    }
+
+    println!("Executable '{}' produced", output_exe);
 }
 
 fn main() {
@@ -52,4 +74,5 @@ fn main() {
 
     let output = codegen(program).unwrap();
     write_file(String::from("out.asm"), &output);
+    assemble_and_link("out.asm", "out");
 }
