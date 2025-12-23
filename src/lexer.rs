@@ -71,10 +71,11 @@ impl Lexer {
                 }
             }
 
-            if token == "return" {
-                return Ok(Token::Return);
-            } else {
-                return Err(LexerError::GenericError);
+            match token.as_str() {
+                "return" => Ok(Token::Return),
+                "function" => Ok(Token::Function),
+                "int" => Ok(Token::IntType),
+                _ => Ok(Token::Identifier(token))
             }
         } else if current_char == ';' {
             self.consume_char();
