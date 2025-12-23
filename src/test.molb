@@ -1,1 +1,3 @@
-return 0;
+function int entry() {
+    return 67;
+}

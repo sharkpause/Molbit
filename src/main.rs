@@ -50,6 +50,6 @@ fn main() {
     let program = parser.parse_program().unwrap();
     println!("\nStatements:\n{:?}", program);
 
-    let output = codegen(program);
+    let output = codegen(program).unwrap();
     write_file(String::from("out.asm"), &output);
 }

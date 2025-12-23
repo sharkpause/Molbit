@@ -77,9 +77,20 @@ impl Lexer {
                 "int" => Ok(Token::IntType),
                 _ => Ok(Token::Identifier(token))
             }
+        } else if current_char == '(' {
+            self.consume_char();
+            return Ok(Token::LeftParentheses);
+        } else if current_char == ')' {
+            self.consume_char();
+            return Ok(Token::RightParentheses);
+        } else if current_char == '{' {
+            self.consume_char();
+            return Ok(Token::LeftBrace);
+        } else if current_char == '}' {
+            self.consume_char();
+            return Ok(Token::RightBrace);
         } else if current_char == ';' {
             self.consume_char();
-
             return Ok(Token::Semicolon);
         } else {
             return Err(LexerError::GenericError);
@@ -92,6 +103,7 @@ impl Lexer {
         loop {
             match self.next_token() {
                 Ok(token) => {
+                    println!("{:?}", token);
                     tokens.push(token);
                 },
                 Err(LexerError::EndOfInput) => {

@@ -1,3 +1,5 @@
 /target
 main
-out.asm
+*.asm
+*.o
+out
