@@ -1,5 +1,3 @@
-use std::env::current_exe;
-
 use crate::token::Token;
 
 #[derive(Debug)]
