@@ -20,12 +20,21 @@ pub enum Statement {
 
 #[derive(Debug)]
 pub enum Expression {
-    IntLiteral(i64)
+    IntLiteral(i64),
+    BinaryOp(Box<Expression>, Operator, Box<Expression>)
 }
 
 #[derive(Debug)]
 pub enum Type {
     Int,
+}
+
+#[derive(Debug)]
+pub enum Operator {
+    Add,
+    Subtract,
+    Multiply,
+    Divide
 }
 
 #[derive(Debug)]
