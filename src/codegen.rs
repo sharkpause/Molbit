@@ -17,10 +17,6 @@ pub fn codegen(program: Vec<TopLevel>) -> Result<String, CodegenError> {
 
     for toplevel in program {
         match toplevel {
-            // Statement::Return(Expression::IntLiteral(value)) => {
-            //     output.push_str(&format!("    mov rax, {}\n", value));
-            //     output.push_str("    ret\n");
-            // }
             TopLevel::Function(function) => {
                 output.push_str(&format!("{}:\n", function.name));
                 
