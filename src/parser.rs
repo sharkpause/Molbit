@@ -16,6 +16,16 @@ pub enum Expression {
     IntLiteral(i64)
 }
 
+pub enum Type {
+    Int,
+}
+
+pub struct Function {
+    pub name: String,
+    pub return_type: Type,
+    pub body: Vec<Statement>
+}
+
 pub struct Parser {
     pub tokens: Vec<Token>,
     pub index: usize
