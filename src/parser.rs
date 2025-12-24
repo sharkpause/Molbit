@@ -161,14 +161,7 @@ impl Parser {
 
                 let expression = self.parse_expression(0)?;
 
-                match self.peek_token(0) {
-                    Some(Token::Semicolon) => {
-                        self.consume_token()
-                    },
-                    _ => {
-                        return Err(ParserError::GenericError);
-                    }
-                }
+                self.expect_token(&Token::Semicolon);
 
                 return Ok(Statement::Return(expression));
             },
