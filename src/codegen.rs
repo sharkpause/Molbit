@@ -81,11 +81,11 @@ impl CodeGenerator {
             Expression::IntLiteral(value) => {
                 output.push_str(&format!("    mov rax, {}\n", value));
             },
-            Expression::UnaryOp(operator, inner) => {
+            Expression::UnaryOperation(operator, inner) => {
                 output.push_str(&self.generate_expression(*inner)?);
                 output.push_str("    neg rax\n");
             },
-            Expression::BinaryOp(lhs,operator ,rhs ) => {
+            Expression::BinaryOperation(lhs,operator ,rhs ) => {
                 let left = self.generate_expression(*lhs)?;
                 output.push_str(&left);
                 output.push_str("    push rax\n");

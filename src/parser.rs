@@ -22,8 +22,8 @@ pub enum Statement {
 #[derive(Debug)]
 pub enum Expression {
     IntLiteral(i64),
-    BinaryOp(Box<Expression>, Operator, Box<Expression>),
-    UnaryOp(Operator, Box<Expression>)
+    BinaryOperation(Box<Expression>, Operator, Box<Expression>),
+    UnaryOperation(Operator, Box<Expression>)
 }
 
 #[derive(Debug)]
@@ -222,7 +222,7 @@ impl Parser {
 
                 let temp = self.parse_expression(3)?;
 
-                Expression::UnaryOp(Operator::Subtract, Box::new(temp))
+                Expression::UnaryOperation(Operator::Subtract, Box::new(temp))
             },
             _ => {
                 return Err(ParserError::UnexpectedToken);
@@ -249,7 +249,7 @@ impl Parser {
                     let operator =
                         self.token_to_operator(&operator).ok_or(ParserError::UnexpectedToken)?;
 
-                    lhs = Expression::BinaryOp(
+                    lhs = Expression::BinaryOperation(
                         Box::new(lhs),
                         operator,
                         Box::new(rhs)
