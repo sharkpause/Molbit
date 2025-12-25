@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{arch::x86_64::_mm256_conflict_epi32, collections::HashMap};
 
 use crate::parser::{Expression, Operator, Statement, TopLevel, Type};
 
@@ -23,7 +23,7 @@ impl Default for CodeGenerator {
 
 impl CodeGenerator {
 
-    pub fn generate(&self, program: Vec<TopLevel>) -> Result<String, CodegenError> {
+    pub fn generate(&mut self, program: Vec<TopLevel>) -> Result<String, CodegenError> {
         let mut output = String::from(
             "global _start\n\
             _start:\n\
@@ -37,17 +37,33 @@ impl CodeGenerator {
             match toplevel {
                 TopLevel::Function(function) => {
                     output.push_str(&format!("{}:\n", function.name));
+                    
+                    let mut statements_code = String::new();
+                    let mut memory_to_reserve = 0;
 
                     for statement in function.body {
                         let statement_code = self.generate_statement(statement)?;
 
-                        output.push_str(&statement_code);
+                        statements_code.push_str(&statement_code.0);
+                        memory_to_reserve += statement_code.1;
                     }
+
+                    output.push_str(&format!(
+                        "\tpush rbp\n\
+                        \tmov rbp, rsp\n\
+                        \tsub rsp, {}\n",
+                        memory_to_reserve));
+                    output.push_str(&statements_code);
+                    output.push_str(
+                        "\tmov rsp, rbp\n\
+                        \tpop rbp\n\
+                        \tret\n"
+                    );
                 },
                 TopLevel::Statement(statement) => {
                     let statement_code = self.generate_statement(statement)?;
 
-                    output.push_str(&statement_code);
+                    output.push_str(&statement_code.0);
                 }
             }
         }
@@ -55,19 +71,32 @@ impl CodeGenerator {
         return Ok(output);
     }
 
-    fn generate_statement(&self, statement: Statement) -> Result<String, CodegenError> {
+    fn generate_statement(&mut self, statement: Statement) -> Result<(String, i64), CodegenError> {
         let mut output = String::new();
 
         match statement {
             Statement::Return(expression) => {
                 output.push_str(&self.generate_expression(expression)?);
-                output.push_str("    ret\n");
             
-                return Ok(output);
+                return Ok((output, 0));
             },
-            // Statement::VariableDeclare(var_type, var_name, expression) {
+            Statement::VariableDeclare(var_type, var_name, expression) => {
+                let stack_offset;
+                let mut allocated_memory = 0;
+                
+                match var_type {
+                    Type::Int => {
+                        self.stack_size += 8;
+                        stack_offset = self.stack_size - 8;
+                        allocated_memory += 8;
+                    }
+                }
+                self.symbol_table.insert(format!("{}", var_name), stack_offset);
 
-            // },
+                output.push_str(&self.generate_expression(expression)?);
+                output.push_str(&format!("    mov [rbp - {}], rax\n", stack_offset));
+                return Ok((output, allocated_memory));
+            },
             _ => {
                 return Err(CodegenError::GenericError);
             }

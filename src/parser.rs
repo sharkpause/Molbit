@@ -170,6 +170,7 @@ impl Parser {
                 
                 let variable_type = self.expect_type()?;
                 let variable_name = self.expect_identifer()?;
+                self.expect_token(&Token::Equal);
                 let initializer = self.parse_expression(0)?;
 
                 self.expect_token(&Token::Semicolon);
