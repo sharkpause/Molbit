@@ -27,7 +27,8 @@ pub enum Expression {
     Variable(String),
     IntLiteral(i64),
     BinaryOperation(Box<Expression>, Operator, Box<Expression>),
-    UnaryOperation(Operator, Box<Expression>)
+    UnaryOperation(Operator, Box<Expression>),
+    FunctionCall(String, Vec<Expression>)
 }
 
 #[derive(Debug)]
