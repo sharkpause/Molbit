@@ -5,7 +5,7 @@ pub enum LexerError {
     GenericError,
     UnexpectedChar(char),
     EndOfInput,
-    UnknownToken
+    UnknownToken(char)
 }
 
 pub struct Lexer {
@@ -105,7 +105,7 @@ impl Lexer {
             if let Some(token) = self.single_char_token() {
                 return Ok(token);
             }
-            return Err(LexerError::UnknownToken);
+            return Err(LexerError::UnknownToken(current_char));
         }
     }
 
