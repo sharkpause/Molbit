@@ -51,30 +51,53 @@ fn main() {
         return;
     }
 
+    let input = read_file(&args[1]);
+
     let mut lexer = Lexer {
-        input: read_file(&args[1]),
-        index: 0
+        input,
+        index: 0,
     };
 
-    let tokens = lexer.tokenize().unwrap();
+    let tokens = match lexer.tokenize() {
+        Ok(tokens) => tokens,
+        Err(e) => {
+            eprintln!("lexer error: {:?}", e);
+            return;
+        }
+    };
 
     println!("Tokens:");
-
     for token in &tokens {
         print_token(token);
     }
 
     let mut parser = Parser {
-        tokens: tokens,
-        index: 0
+        tokens,
+        index: 0,
     };
 
-    let program = parser.parse_program().unwrap();
-    println!("\nStatements:\n{:?}", program);
+    let program = match parser.parse_program() {
+        Ok(program) => program,
+        Err(e) => {
+            eprintln!("parser error: {:?}", e);
+            return;
+        }
+    };
 
-    let mut codegenerator = CodeGenerator::default();
+    println!("\nAST:\n{:#?}", program);
 
-    let output = codegenerator.generate(program).unwrap();
+    let mut codegen = CodeGenerator::default();
+
+    let output = match codegen.generate(program) {
+        Ok(output) => output,
+        Err(e) => {
+            eprintln!("codegen error: {:?}", e);
+            return;
+        }
+    };
+
+    println!("{}", output);
+
     write_file(String::from("out.asm"), &output);
     assemble_and_link("out.asm", "out");
 }
