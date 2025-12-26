@@ -21,6 +21,7 @@ pub enum Statement {
 
 #[derive(Debug)]
 pub enum Expression {
+    Variable(String),
     IntLiteral(i64),
     BinaryOperation(Box<Expression>, Operator, Box<Expression>),
     UnaryOperation(Operator, Box<Expression>)
@@ -95,6 +96,24 @@ impl Parser {
             _ => {
                 return Err(ParserError::UnexpectedToken);
             }
+        }
+    }
+
+    fn binding_power(&self, token: &Token) -> Option<u8> {
+        return match token {
+            Token::Plus | Token::Minus => Some(1),
+            Token::Star | Token::Slash => Some(2),
+            _ => None
+        };
+    }
+
+    fn token_to_operator(&self, token: &Token) -> Option<Operator> {
+        return match token {
+            Token::Plus => Some(Operator::Add),
+            Token::Minus => Some(Operator::Subtract),
+            Token::Star => Some(Operator::Multiply),
+            Token::Slash => Some(Operator::Divide),
+            _ => None
         }
     }
 
@@ -183,29 +202,15 @@ impl Parser {
         }
     }
 
-    fn binding_power(&self, token: &Token) -> Option<u8> {
-        return match token {
-            Token::Plus | Token::Minus => Some(1),
-            Token::Star | Token::Slash => Some(2),
-            _ => None
-        };
-    }
-
-    fn token_to_operator(&self, token: &Token) -> Option<Operator> {
-        return match token {
-            Token::Plus => Some(Operator::Add),
-            Token::Minus => Some(Operator::Subtract),
-            Token::Star => Some(Operator::Multiply),
-            Token::Slash => Some(Operator::Divide),
-            _ => None
-        }
-    }
-
     pub fn parse_expression(&mut self, min_bp: u8) -> Result<Expression, ParserError> {
         let current_token =
             self.peek_token(0).ok_or(ParserError::GenericError)?.clone();
         
         let mut lhs = match current_token {
+            Token::Identifier(name) => {
+                self.consume_token();
+                Expression::Variable(name)
+            },
             Token::IntLiteral(number) => {
                 self.consume_token();
                 Expression::IntLiteral(number)

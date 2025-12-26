@@ -107,6 +107,11 @@ impl CodeGenerator {
         let mut output = String::new();
 
         match expression {
+            Expression::Variable(name) => {
+                let offset = // CodegenError::VariableNotExist
+                    self.symbol_table.get(&name).ok_or(CodegenError::GenericError)?;
+                output.push_str(&format!("    mov rax, [rbp - {}]\n", offset));
+            },
             Expression::IntLiteral(value) => {
                 output.push_str(&format!("    mov rax, {}\n", value));
             },
