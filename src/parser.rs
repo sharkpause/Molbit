@@ -58,6 +58,7 @@ operator  | binding power
 pub struct Function {
     pub name: String,
     pub return_type: Type,
+    pub parameters: Vec<(Type, String)>,
     pub body: Statement
 }
 
@@ -159,11 +160,28 @@ impl Parser {
         let function_name = self.expect_identifer()?;
 
         self.expect_token(&Token::LeftParentheses)?;
-        self.expect_token(&Token::RightParentheses)?;
+
+        let mut parameters: Vec<(Type, String)> = Vec::new();
+        if !matches!(self.peek_token(0), Some(Token::RightParentheses)) {
+            loop {
+                let parameter_type = self.expect_type()?;
+                let parameter_name = self.expect_identifer()?;
+                parameters.push((parameter_type, parameter_name));
+
+                if matches!(self.peek_token(0), Some(Token::Comma)) {
+                    self.consume_token();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        self.consume_token();
 
         return Ok(Function {
             name: function_name,
             return_type: return_type,
+            parameters,
             body: self.parse_block()?
         });
     }

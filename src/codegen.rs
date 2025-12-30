@@ -162,7 +162,7 @@ impl CodeGenerator {
                         _ => unimplemented!("Stack arguents not supported yet"),
                     };
 
-                    output.push_str(&format!("mov {}, rax", register));
+                    output.push_str(&format!("\tmov {}, rax\n", register));
                 }
 
                 let function_name = match &**name {
