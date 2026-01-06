@@ -8,6 +8,9 @@ use std::{env, fs, process::Command};
 use crate::token::print_token;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
+use crate::parser::TopLevel;
+use crate::parser::Statement;
+use crate::parser::Expression;
 use crate::codegen::{ CodeGenerator };
 
 fn read_file(path: &String) -> String {
@@ -41,6 +44,74 @@ fn assemble_and_link(asm_path: &str, output_exe: &str) {
     }
 
     println!("Executable '{}' produced", output_exe);
+}
+
+fn print_statement(stmt: &Statement, indent: usize) {
+    let padding = "  ".repeat(indent);
+
+    match stmt {
+        Statement::Return(expr) => {
+            println!("{}Return:", padding);
+            print_expression(expr, indent + 1);
+        }
+        Statement::VariableDeclare(ty, name, expr) => {
+            println!("{}Declare {:?} {}", padding, ty, name);
+            print_expression(expr, indent + 1);
+        }
+        Statement::VariableAssignment(name, expr) => {
+            println!("{}Assign {}", padding, name);
+            print_expression(expr, indent + 1);
+        }
+        Statement::Block(stmts) => {
+            println!("{}Block:", padding);
+            for s in stmts {
+                print_statement(s, indent + 1);
+            }
+        }
+        Statement::Expression(expr) => {
+            println!("{}Expression:", padding);
+            print_expression(expr, indent + 1);
+        }
+        Statement::If(cond, then_body, else_body) => {
+            println!("{}If:", padding);
+            print_expression(cond, indent + 1);
+            println!("{}Then:", padding);
+            print_statement(then_body, indent + 1);
+            if let Some(else_stmt) = else_body {
+                println!("{}Else:", padding);
+                print_statement(else_stmt, indent + 1);
+            }
+        }
+        Statement::Else(body) => {
+            println!("{}Else:", padding);
+            print_statement(body, indent + 1);
+        }
+    }
+}
+
+fn print_expression(expr: &Expression, indent: usize) {
+    let padding = "  ".repeat(indent);
+
+    match expr {
+        Expression::Variable(name) => println!("{}Variable {}", padding, name),
+        Expression::IntLiteral(value) => println!("{}Int {}", padding, value),
+        Expression::UnaryOperation(op, inner) => {
+            println!("{}Unary {:?}", padding, op);
+            print_expression(inner, indent + 1);
+        }
+        Expression::BinaryOperation(lhs, op, rhs) => {
+            println!("{}Binary {:?}", padding, op);
+            print_expression(lhs, indent + 1);
+            print_expression(rhs, indent + 1);
+        }
+        Expression::FunctionCall(func, args) => {
+            println!("{}Call:", padding);
+            print_expression(func, indent + 1);
+            for arg in args {
+                print_expression(arg, indent + 1);
+            }
+        }
+    }
 }
 
 fn main() {
@@ -84,7 +155,15 @@ fn main() {
         }
     };
 
-    println!("\nAST:\n{:#?}", program);
+    for toplevel in &program {
+        match toplevel {
+            TopLevel::Function(f) => {
+                println!("Function: {}", f.name);
+                print_statement(&f.body, 1);
+            }
+            TopLevel::Statement(s) => print_statement(&s, 1),
+        }
+    }
 
     let mut codegen = CodeGenerator::default();
 

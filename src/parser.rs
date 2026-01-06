@@ -15,7 +15,7 @@ pub enum TopLevel {
     Statement(Statement)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     Return(Expression),
     VariableDeclare(Type, String, Expression),
@@ -35,7 +35,7 @@ pub enum Expression {
     FunctionCall(Box<Expression>, Vec<Expression>)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Type {
     Int,
 }
@@ -253,6 +253,49 @@ impl Parser {
 
                     return Ok(Statement::Expression(expression));
                 }
+            },
+            Some(Token::If) => {
+                let mut conditions = Vec::new();
+                let mut bodies = Vec::new();
+
+                self.consume_token();
+
+                let condition = self.parse_expression(0)?;
+                let body = self.parse_block()?;
+
+                conditions.push(condition);
+                bodies.push(body);
+
+                while let Some(Token::Else) = self.peek_token(0) {
+                    if let Some(Token::If) = self.peek_token(1) {
+                        self.consume_token();
+                        self.consume_token();
+                        
+                        let condition = self.parse_expression(0)?;
+                        let body = self.parse_block()?;
+
+                        conditions.push(condition);
+                        bodies.push(body);
+                    } else {
+                        break;
+                    }
+                }
+
+                let else_body = if let Some(Token::Else) = self.peek_token(0) {
+                    self.consume_token();
+                    Some(Box::new(self.parse_block()?))
+                } else {
+                    None
+                };
+
+                let mut result = else_body;
+                for (condition, body)
+                    in conditions.iter().rev()
+                            .zip(bodies.iter().rev()) {
+                    result = Some(Box::new(Statement::If(condition.clone(), Box::new(body.clone()), result)));
+                }
+
+                return Ok(*result.expect("Internal parser error: expected at least one if/else branch. Something fucked up"));
             },
             _ => {
                 return Err(ParserError::GenericError);
