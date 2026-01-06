@@ -86,12 +86,21 @@ impl Lexer {
         
             return Ok(Token::IntLiteral(number));
         } else if current_char.is_alphanumeric() {
-            while let Some(character) = self.peek_char(0) {
-                if character.is_alphanumeric() {
-                    token.push(character);
+            if let Some(first) = self.peek_char(0) {
+                if first.is_alphabetic() || first == '_' {
+                    token.push(first);
                     self.consume_char();
+                
+                    while let Some(character) = self.peek_char(0) {
+                        if character.is_alphanumeric() || character == '_' {
+                            token.push(character);
+                            self.consume_char();
+                        } else {
+                            break;
+                        }
+                    }
                 } else {
-                    break;
+                    return Err(LexerError::UnexpectedChar(first));
                 }
             }
 
