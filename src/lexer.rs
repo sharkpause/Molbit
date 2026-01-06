@@ -74,14 +74,14 @@ impl Lexer {
                     self.consume_char();
                     Some(Token::NotEqual)
                 } else {
-                    Some(Token::Not)
+                    Some(Token::ExclamationMark)
                 }
             },
             '<' => {
                 if self.peek_char(1)? == '=' {
                     self.consume_char();
                     self.consume_char();
-                    Some(Token::LessEqualThan)
+                    Some(Token::LessEqual)
                 } else if self.peek_char(1)? == '>' {
                     self.consume_char();
                     self.consume_char();
@@ -94,7 +94,7 @@ impl Lexer {
                 if self.peek_char(1)? == '=' {
                     self.consume_char();
                     self.consume_char();
-                    Some(Token::GreaterThan) // or GreaterEqual?
+                    Some(Token::DoubleRightAngleBracket) // or GreaterEqual?
                 } else {
                     None
                 }
@@ -103,7 +103,7 @@ impl Lexer {
                 if self.peek_char(1)? == '&' {
                     self.consume_char();
                     self.consume_char();
-                    Some(Token::And)
+                    Some(Token::DoubleAmpersand)
                 } else {
                     None
                 }
@@ -112,7 +112,7 @@ impl Lexer {
                 if self.peek_char(1)? == '|' {
                     self.consume_char();
                     self.consume_char();
-                    Some(Token::Or)
+                    Some(Token::DoublePipe)
                 } else {
                     None
                 }
