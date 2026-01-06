@@ -265,6 +265,9 @@ impl CodeGenerator {
                         output.push_str("    xchg rax, rcx\n");
                         output.push_str("    xor rdx, rdx\n");
                         output.push_str("    idiv rcx\n");
+                    },
+                    _ => {
+                        return Err(CodegenError::GenericError);
                     }
                 }
             }

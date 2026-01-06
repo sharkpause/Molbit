@@ -11,9 +11,9 @@ function int entry() {
     var int y = 15;
     var int z = 0;
 
-    if(x + 20) {
+    if(x == 20) {
         z = sub_wrapper(x, y);
-    } else if(x + 10) {
+    } else if(x != 10) {
         z = 99;
     } else {
         z = -10;

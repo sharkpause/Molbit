@@ -42,19 +42,20 @@ pub enum Type {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Operator {
-    Add,
-    Subtract,
-    Multiply,
-    Divide
+    Add,           // +
+    Subtract,      // -
+    Multiply,      // *
+    Divide,        // /
+    Equal,         // ==
+    NotEqual,      // !=
+    LessThan,      // <
+    GreaterThan,   // >
+    LessEqual,     // <=
+    GreaterEqual,  // >=
+    And,           // &&
+    Or,            // ||
+    Not,           // !
 }
-/*
-
-operator  | binding power
-----------+--------------
-* /       |  2
-+ -       |  1
-
-*/
 
 #[derive(Debug)]
 pub struct Function {
@@ -118,9 +119,29 @@ impl Parser {
     }
 
     fn binding_power(&self, token: &Token) -> Option<u8> {
+        /*
+        highest
+        -------
+        ! (not)
+        * / 
+        + -
+        < <= > >=
+        == !=
+        && 
+        ||
+        -------
+        lowest
+        */
+
         return match token {
-            Token::Plus | Token::Minus => Some(1),
-            Token::Star | Token::Slash => Some(2),
+            Token::Or => Some(1),
+            Token::And => Some(2),
+            Token::DoubleEqual | Token::NotEqual => Some(3),
+            Token::LessThan | Token::LessEqual => Some(4),
+            Token::GreaterThan | Token::GreaterEqual => Some(5),
+            Token::Plus | Token::Minus => Some(6),
+            Token::Star | Token::Slash => Some(7),
+            Token::Not => Some(8),
             _ => None
         };
     }
@@ -131,6 +152,13 @@ impl Parser {
             Token::Minus => Some(Operator::Subtract),
             Token::Star => Some(Operator::Multiply),
             Token::Slash => Some(Operator::Divide),
+            Token::DoubleEqual => Some(Operator::Equal),
+            Token::NotEqual => Some(Operator::NotEqual),
+            Token::LessThan => Some(Operator::LessThan),
+            Token::LessEqual => Some(Operator::LessEqual),
+            Token::GreaterThan => Some(Operator::GreaterThan),
+            Token::GreaterEqual => Some(Operator::GreaterEqual),
+            Token::Not => Some(Operator::Not),
             _ => None
         }
     }
@@ -353,10 +381,17 @@ impl Parser {
             Token::Minus => {
                 self.consume_token();
 
-                let temp = self.parse_expression(3)?;
+                let expression = self.parse_expression(3)?;
 
-                Expression::UnaryOperation(Operator::Subtract, Box::new(temp))
+                Expression::UnaryOperation(Operator::Subtract, Box::new(expression))
             },
+            Token::Not => {
+                self.consume_token();
+
+                let expression = self.parse_expression(0)?;
+
+                Expression::UnaryOperation(Operator::Not, Box::new(expression))
+            }
             _ => {
                 return Err(ParserError::UnexpectedToken(current_token));
             }
@@ -365,7 +400,7 @@ impl Parser {
         loop {
             let operator =
                 self.peek_token(0).cloned().ok_or(ParserError::UnexpectedEndOfInput)?;
-            
+            println!("\n{:?}", operator);
             let binding_power = self.binding_power(&operator);
             
             match binding_power {
