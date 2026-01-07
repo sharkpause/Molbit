@@ -4,3 +4,4 @@ main
 *.o
 out
 .vscode/
+src/test.molb
