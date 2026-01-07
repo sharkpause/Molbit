@@ -380,6 +380,20 @@ impl Parser {
 
                 return Ok(*result.expect("Internal parser error: expected at least one if/else branch. Something fucked up"));
             },
+            Some(Token::While) => {
+                self.consume_token();
+
+                self.expect_token(&Token::LeftParentheses)?;
+                let condition = self.parse_expression(0)?;
+                self.expect_token(&Token::RightParentheses)?;
+
+                let body = Box::new(self.parse_statement()?);
+
+                return Ok(Statement::While {
+                    condition,
+                    body
+                });
+            }
             _ => {
                 return Err(ParserError::GenericError);
             }
