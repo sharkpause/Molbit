@@ -116,7 +116,7 @@ impl CodeGenerator {
 
     fn generate_function_body(&mut self, statement: Statement) -> Result<String, CodegenError> {
         match statement {
-            Statement::Block(statements) => {
+            Statement::Block{ statements } => {
                 let mut statements_code = String::new();
                 
                 for statement in statements {
@@ -136,7 +136,7 @@ impl CodeGenerator {
         let mut output = String::new();
 
         match statement {
-            Statement::Block(statements) => {
+            Statement::Block{ statements} => {
                 self.enter_scope();
 
                 let mut statements_code = String::new();
@@ -149,7 +149,7 @@ impl CodeGenerator {
                 self.exit_scope();
                 return Ok(statements_code);
             },
-            Statement::Return(expression) => {
+            Statement::Return{ value: expression } => {
                 output.push_str(&self.generate_expression(&expression)?);
                 output.push_str(
                     "\tmov rsp, rbp\n\
@@ -159,7 +159,7 @@ impl CodeGenerator {
             
                 return Ok(output);
             },
-            Statement::VariableDeclare(var_type, var_name, expression) => {
+            Statement::VariableDeclare{ var_type, name: var_name , initializer: expression } => {
                 let stack_offset;
                 
                 match var_type {
@@ -177,7 +177,7 @@ impl CodeGenerator {
                 output.push_str(&format!("\tmov [rbp - {}], rax\n", stack_offset));
                 return Ok(output);
             },
-            Statement::VariableAssignment(name, expression) => {
+            Statement::VariableAssignment{ name, value: expression } => {
                 let offset = self.lookup_variable(&name)?;
             
                 output.push_str(&self.generate_expression(&expression)?);
@@ -185,12 +185,12 @@ impl CodeGenerator {
 
                 return Ok(output);
             },
-            Statement::Expression(expression) => {
+            Statement::Expression{ expression } => {
                 let output = self.generate_expression(&expression)?;
 
                 return Ok(output);
             },
-            Statement::If(expression, body, else_) => {
+            Statement::If{ condition: expression, then_branch: body, else_branch: else_ } => {
                 // line below is for generating arguments
                 let mut output = self.generate_expression(&expression)?;
                 
@@ -232,7 +232,7 @@ impl CodeGenerator {
         let mut output = String::new();
 
         match expression {
-            Expression::FunctionCall(name, arguments) => {
+            Expression::FunctionCall{ callee: name, arguments } => {
                 for (index, argument) in arguments.iter().enumerate() {
                     output.push_str(&self.generate_expression(argument)?);
 
@@ -250,7 +250,7 @@ impl CodeGenerator {
                 }
 
                 let function_name = match &**name {
-                    Expression::Variable(name) => {
+                    Expression::Variable{ name } => {
                         name
                     },
                     _ => {
@@ -260,19 +260,19 @@ impl CodeGenerator {
 
                 output.push_str(&format!("\tcall {}\n", function_name));
             },
-            Expression::Variable(name) => {
+            Expression::Variable{ name } => {
                 let offset = self.lookup_variable(&name)?;
 
                 output.push_str(&format!("\tmov rax, [rbp - {}]\n", offset));
             },
-            Expression::IntLiteral(value) => {
+            Expression::IntLiteral{ value } => {
                 output.push_str(&format!("\tmov rax, {}\n", value));
             },
-            Expression::UnaryOperation(operator, inner) => {
+            Expression::UnaryOperation{ operator, operand: inner } => {
                 output.push_str(&self.generate_expression(inner)?);
                 output.push_str("\tneg rax\n");
             },
-            Expression::BinaryOperation(lhs,operator ,rhs ) => {
+            Expression::BinaryOperation{ left: lhs,operator ,right: rhs } => {
                 let left = self.generate_expression(lhs)?;
                 output.push_str(&left);
                 output.push_str("\tpush rax\n");
@@ -330,20 +330,20 @@ impl CodeGenerator {
                         output.push_str("\tmovzx rax, al\n");
                     },
                     Operator::And => {
-                        output.push_str("cmp rcx, 0\n");
-                        output.push_str("setne cl\n");
-                        output.push_str("cmp rax, 0\n");
-                        output.push_str("setne al\n");
-                        output.push_str("and al, cl\n");
-                        output.push_str("movzx rax, al\n");
+                        output.push_str("\tcmp rcx, 0\n");
+                        output.push_str("\tsetne cl\n");
+                        output.push_str("\tcmp rax, 0\n");
+                        output.push_str("\tsetne al\n");
+                        output.push_str("\tand al, cl\n");
+                        output.push_str("\tmovzx rax, al\n");
                     },
                     Operator::Or => {
-                        output.push_str("cmp rcx, 0\n");
-                        output.push_str("setne cl\n");
-                        output.push_str("cmp rax, 0\n");
-                        output.push_str("setne al\n");
-                        output.push_str("or al, cl\n");
-                        output.push_str("movzx rax, al\n");
+                        output.push_str("\tcmp rcx, 0\n");
+                        output.push_str("\tsetne cl\n");
+                        output.push_str("\tcmp rax, 0\n");
+                        output.push_str("\tsetne al\n");
+                        output.push_str("\tor al, cl\n");
+                        output.push_str("\tmovzx rax, al\n");
                     },
                     Operator::Not => {
                         output.push_str("\tcmp rax, 0\n");

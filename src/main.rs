@@ -50,69 +50,100 @@ fn print_statement(stmt: &Statement, indent: usize) {
     let padding = "  ".repeat(indent);
 
     match stmt {
-        Statement::Return(expr) => {
+        Statement::Return { value } => {
             println!("{}Return:", padding);
-            print_expression(expr, indent + 1);
+            print_expression(value, indent + 1);
         }
-        Statement::VariableDeclare(ty, name, expr) => {
-            println!("{}Declare {:?} {}", padding, ty, name);
-            print_expression(expr, indent + 1);
+
+        Statement::VariableDeclare {
+            var_type,
+            name,
+            initializer,
+        } => {
+            println!("{}Declare {:?} {}", padding, var_type, name);
+            print_expression(initializer, indent + 1);
         }
-        Statement::VariableAssignment(name, expr) => {
+
+        Statement::VariableAssignment { name, value } => {
             println!("{}Assign {}", padding, name);
-            print_expression(expr, indent + 1);
+            print_expression(value, indent + 1);
         }
-        Statement::Block(stmts) => {
+
+        Statement::Block { statements } => {
             println!("{}Block:", padding);
-            for s in stmts {
-                print_statement(s, indent + 1);
+            for stmt in statements {
+                print_statement(stmt, indent + 1);
             }
         }
-        Statement::Expression(expr) => {
+
+        Statement::Expression { expression } => {
             println!("{}Expression:", padding);
-            print_expression(expr, indent + 1);
+            print_expression(expression, indent + 1);
         }
-        Statement::If(cond, then_body, else_body) => {
+
+        Statement::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
             println!("{}If:", padding);
-            print_expression(cond, indent + 1);
+            print_expression(condition, indent + 1);
+
             println!("{}Then:", padding);
-            print_statement(then_body, indent + 1);
-            if let Some(else_stmt) = else_body {
+            print_statement(then_branch, indent + 1);
+
+            if let Some(else_stmt) = else_branch {
                 println!("{}Else:", padding);
                 print_statement(else_stmt, indent + 1);
             }
         }
-        Statement::Else(body) => {
-            println!("{}Else:", padding);
+
+        Statement::While { condition, body } => {
+            println!("{}While:", padding);
+            print_expression(condition, indent + 1);
             print_statement(body, indent + 1);
         }
     }
 }
 
+
 fn print_expression(expr: &Expression, indent: usize) {
     let padding = "  ".repeat(indent);
 
     match expr {
-        Expression::Variable(name) => println!("{}Variable {}", padding, name),
-        Expression::IntLiteral(value) => println!("{}Int {}", padding, value),
-        Expression::UnaryOperation(op, inner) => {
-            println!("{}Unary {:?}", padding, op);
-            print_expression(inner, indent + 1);
+        Expression::Variable { name } => {
+            println!("{}Variable {}", padding, name);
         }
-        Expression::BinaryOperation(lhs, op, rhs) => {
-            println!("{}Binary {:?}", padding, op);
-            print_expression(lhs, indent + 1);
-            print_expression(rhs, indent + 1);
+
+        Expression::IntLiteral { value } => {
+            println!("{}Int {}", padding, value);
         }
-        Expression::FunctionCall(func, args) => {
+
+        Expression::UnaryOperation { operator, operand } => {
+            println!("{}Unary {:?}", padding, operator);
+            print_expression(operand, indent + 1);
+        }
+
+        Expression::BinaryOperation {
+            left,
+            operator,
+            right,
+        } => {
+            println!("{}Binary {:?}", padding, operator);
+            print_expression(left, indent + 1);
+            print_expression(right, indent + 1);
+        }
+
+        Expression::FunctionCall { callee, arguments } => {
             println!("{}Call:", padding);
-            print_expression(func, indent + 1);
-            for arg in args {
+            print_expression(callee, indent + 1);
+            for arg in arguments {
                 print_expression(arg, indent + 1);
             }
         }
     }
 }
+
 
 fn main() {
     let args: Vec<String> = env::args().collect();

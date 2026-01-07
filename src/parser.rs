@@ -17,23 +17,68 @@ pub enum TopLevel {
 
 #[derive(Debug, Clone)]
 pub enum Statement {
-    Return(Expression),
-    VariableDeclare(Type, String, Expression),
-    VariableAssignment(String, Expression),
-    Block(Vec<Statement>),
-    Expression(Expression),
-    Else(Box<Statement>),
-    If(Expression, Box<Statement>, Option<Box<Statement>>)
+    Return {
+        value: Expression,
+    },
+
+    VariableDeclare {
+        var_type: Type,
+        name: String,
+        initializer: Expression,
+    },
+
+    VariableAssignment {
+        name: String,
+        value: Expression,
+    },
+
+    Block {
+        statements: Vec<Statement>,
+    },
+
+    Expression {
+        expression: Expression,
+    },
+
+    If {
+        condition: Expression,
+        then_branch: Box<Statement>,
+        else_branch: Option<Box<Statement>>,
+    },
+
+    While {
+        condition: Expression,
+        body: Box<Statement>,
+    },
 }
 
 #[derive(Debug, Clone)]
 pub enum Expression {
-    Variable(String),
-    IntLiteral(i64),
-    BinaryOperation(Box<Expression>, Operator, Box<Expression>),
-    UnaryOperation(Operator, Box<Expression>),
-    FunctionCall(Box<Expression>, Vec<Expression>)
+    Variable {
+        name: String,
+    },
+
+    IntLiteral {
+        value: i64,
+    },
+
+    BinaryOperation {
+        left: Box<Expression>,
+        operator: Operator,
+        right: Box<Expression>,
+    },
+
+    UnaryOperation {
+        operator: Operator,
+        operand: Box<Expression>,
+    },
+
+    FunctionCall {
+        callee: Box<Expression>,
+        arguments: Vec<Expression>,
+    },
 }
+
 
 #[derive(Debug, Clone)]
 pub enum Type {
@@ -224,7 +269,7 @@ impl Parser {
 
         self.expect_token(&Token::RightBrace)?;
 
-        return Ok(Statement::Block(statements));
+        return Ok(Statement::Block{ statements });
     }
 
     pub fn parse_statements(&mut self) -> Result<Vec<Statement>, ParserError> {
@@ -253,7 +298,7 @@ impl Parser {
 
                 self.expect_token(&Token::Semicolon)?;
 
-                return Ok(Statement::Return(expression));
+                return Ok(Statement::Return{ value: expression });
             },
             Some(Token::Var) => {
                 self.consume_token();
@@ -264,7 +309,11 @@ impl Parser {
 
                 self.expect_token(&Token::Semicolon)?;
 
-                return Ok(Statement::VariableDeclare(variable_type, variable_name, initializer));
+                return Ok(Statement::VariableDeclare{
+                    var_type: variable_type,
+                    name: variable_name,
+                    initializer
+                });
             },
             Some(Token::Identifier(name)) => {
                 let name = name.clone();
@@ -276,12 +325,12 @@ impl Parser {
                     let expression = self.parse_expression(0)?;
                     self.expect_token(&Token::Semicolon)?;
 
-                    return Ok(Statement::VariableAssignment(name.to_string(), expression));
+                    return Ok(Statement::VariableAssignment{ name: name.to_string(), value: expression });
                 } else {
                     let expression = self.parse_expression(0)?;
                     self.expect_token(&Token::Semicolon)?;
 
-                    return Ok(Statement::Expression(expression));
+                    return Ok(Statement::Expression{ expression });
                 }
             },
             Some(Token::If) => {
@@ -322,7 +371,11 @@ impl Parser {
                 for (condition, body)
                     in conditions.iter().rev()
                             .zip(bodies.iter().rev()) {
-                    result = Some(Box::new(Statement::If(condition.clone(), Box::new(body.clone()), result)));
+                    result = Some(Box::new(Statement::If{
+                        condition: condition.clone(),
+                        then_branch: Box::new(body.clone()),
+                        else_branch: result
+                    }));
                 }
 
                 return Ok(*result.expect("Internal parser error: expected at least one if/else branch. Something fucked up"));
@@ -360,17 +413,17 @@ impl Parser {
 
                     self.expect_token(&Token::RightParentheses)?;
                     
-                    Expression::FunctionCall(
-                        Box::new(Expression::Variable(name)),
+                    Expression::FunctionCall{
+                        callee: Box::new(Expression::Variable{ name }),
                         arguments
-                    )
+                    }
                 } else {
-                    Expression::Variable(name)
+                    Expression::Variable{ name }
                 }
             },
             Token::IntLiteral(number) => {
                 self.consume_token();
-                Expression::IntLiteral(number)
+                Expression::IntLiteral{ value: number }
             },
             Token::LeftParentheses => {
                 self.consume_token();
@@ -385,53 +438,46 @@ impl Parser {
 
                 let expression = self.parse_expression(6)?;
 
-                Expression::UnaryOperation(Operator::Subtract, Box::new(expression))
+                Expression::UnaryOperation{ operator: Operator::Subtract, operand: Box::new(expression) }
             },
             Token::Not => {
                 self.consume_token();
 
                 let expression = self.parse_expression(8)?;
 
-                Expression::UnaryOperation(Operator::Not, Box::new(expression))
+                Expression::UnaryOperation{ operator: Operator::Not, operand: Box::new(expression) }
             }
             _ => {
                 return Err(ParserError::UnexpectedToken(current_token));
             }
         };
         loop {
-            println!("Current token: {:?}", self.peek_token(0));
             let operator_token =
                 self.peek_token(0).cloned().ok_or(ParserError::UnexpectedEndOfInput)?;
 
             let binding_power = self.binding_power(&operator_token);
-            println!("bp: {:?}", binding_power);
             
             match binding_power {
                 Some(bp) => {
-                    println!("inside binding_power some: {:?}", operator_token);
                     if bp < min_bp {
                         break;
                     }
-                    println!("Pass through");
 
                     self.consume_token();
                     let rhs_min_bp = bp + 1;
                     let rhs =
                         self.parse_expression(rhs_min_bp)?;
 
-                    println!("a");
                     let operator = self.token_to_operator(&operator_token)
-                        .ok_or(ParserError::UnexpectedEndOfInput)?;
-                    println!("{:?}", operator);
+                        .ok_or(ParserError::UnexpectedToken(operator_token))?;
 
-                    lhs = Expression::BinaryOperation(
-                        Box::new(lhs),
+                    lhs = Expression::BinaryOperation{
+                        left: Box::new(lhs),
                         operator,
-                        Box::new(rhs)
-                    );
+                        right: Box::new(rhs)
+                    };
                 },
                 None => {
-                    println!("inside binding_power none: {:?}", operator_token);
                     break;
                 }
             };

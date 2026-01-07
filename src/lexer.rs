@@ -194,7 +194,6 @@ impl Lexer {
         loop {
             match self.next_token() {
                 Ok(token) => {
-                    println!("{:?}", token);
                     tokens.push(token);
                 },
                 Err(LexerError::EndOfInput) => {
