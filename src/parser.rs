@@ -159,6 +159,8 @@ impl Parser {
             Token::GreaterThan => Some(Operator::GreaterThan),
             Token::GreaterEqual => Some(Operator::GreaterEqual),
             Token::Not => Some(Operator::Not),
+            Token::And => Some(Operator::And),
+            Token::Or => Some(Operator::Or),
             _ => None
         }
     }
@@ -381,14 +383,14 @@ impl Parser {
             Token::Minus => {
                 self.consume_token();
 
-                let expression = self.parse_expression(3)?;
+                let expression = self.parse_expression(6)?;
 
                 Expression::UnaryOperation(Operator::Subtract, Box::new(expression))
             },
             Token::Not => {
                 self.consume_token();
 
-                let expression = self.parse_expression(0)?;
+                let expression = self.parse_expression(8)?;
 
                 Expression::UnaryOperation(Operator::Not, Box::new(expression))
             }
@@ -396,26 +398,31 @@ impl Parser {
                 return Err(ParserError::UnexpectedToken(current_token));
             }
         };
-        
         loop {
-            let operator =
+            println!("Current token: {:?}", self.peek_token(0));
+            let operator_token =
                 self.peek_token(0).cloned().ok_or(ParserError::UnexpectedEndOfInput)?;
-            println!("\n{:?}", operator);
-            let binding_power = self.binding_power(&operator);
+
+            let binding_power = self.binding_power(&operator_token);
+            println!("bp: {:?}", binding_power);
             
             match binding_power {
                 Some(bp) => {
+                    println!("inside binding_power some: {:?}", operator_token);
                     if bp < min_bp {
                         break;
                     }
+                    println!("Pass through");
 
                     self.consume_token();
                     let rhs_min_bp = bp + 1;
                     let rhs =
                         self.parse_expression(rhs_min_bp)?;
 
-                    let operator =
-                        self.token_to_operator(&operator).ok_or(ParserError::UnexpectedEndOfInput)?;
+                    println!("a");
+                    let operator = self.token_to_operator(&operator_token)
+                        .expect("binding_power returned Some but token_to_operator returned None");
+                    println!("{:?}", operator);
 
                     lhs = Expression::BinaryOperation(
                         Box::new(lhs),
@@ -424,6 +431,7 @@ impl Parser {
                     );
                 },
                 None => {
+                    println!("inside binding_power none: {:?}", operator_token);
                     break;
                 }
             };
