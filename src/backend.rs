@@ -1,6 +1,4 @@
-use std::{ collections::HashMap };
-
-use crate::parser::{Expression, Operator, Statement, TopLevel, Type};
+use crate::parser::{ TopLevel };
 
 #[derive(Debug)]
 pub enum CodegenError {
