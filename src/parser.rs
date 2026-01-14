@@ -11,7 +11,7 @@ pub enum ParserError {
     UnexpectedType(Type)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TopLevel {
     Function(Function),
     Statement(Statement)
@@ -107,7 +107,7 @@ pub enum Operator {
     Not,           // !
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Function {
     pub name: String,
     pub return_type: Type,
@@ -121,6 +121,14 @@ pub struct Parser {
 }
 
 impl Parser {
+    pub fn from(tokens: Vec<Token>) -> Self {
+        // Potentially change to take ownership of tokens instead of copy for performance and memory usage
+        return Self {
+            tokens,
+            index: 0
+        };
+    }
+
     fn peek_token(&self, offset: usize) -> Option<&Token> {
         return self.tokens.get(self.index + offset);
     }

@@ -1,21 +1,22 @@
 mod token;
 mod lexer;
 mod parser;
-// mod backend;
-// mod backends;
-// mod semantic_analyzer;
+mod backend;
+mod backends;
+mod semantic_analyzer;
 
 use std::{env, fs, process::Command};
 
+use crate::semantic_analyzer::SemanticAnalyzer;
 use crate::token::print_token;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::parser::TopLevel;
 use crate::parser::Statement;
 use crate::parser::Expression;
-// use crate::backend::generate_program;
+use crate::backend::generate_program;
+use crate::backends::asm_codegen::ASMCodeGenerator;
 // use crate::backends::LLVMCodeGenerator;
-// use crate::semantic_analyzer::validate;
 
 fn read_file(path: &String) -> String {
     let source_code =
@@ -181,12 +182,9 @@ fn main() {
         print_token(token);
     }
 
-    let mut parser = Parser {
-        tokens,
-        index: 0,
-    };
+    let mut parser = Parser::from(tokens);
 
-    let program = match parser.parse_program() {
+    let program_tree = match parser.parse_program() {
         Ok(program) => program,
         Err(e) => {
             eprintln!("parser error: {:?}", e);
@@ -194,7 +192,7 @@ fn main() {
         }
     };
 
-    for toplevel in &program {
+    for toplevel in &program_tree {
         match toplevel {
             TopLevel::Function(f) => {
                 println!("Function: {}", f.name);
@@ -204,20 +202,22 @@ fn main() {
         }
     }
 
-    // let mut semantic_analyzer = 
+    let mut semantic_analyzer = SemanticAnalyzer::from(&program_tree);
+    semantic_analyzer.analyze().unwrap();
 
-    // let mut llvm_codegen = LLVMCodeGenerator::default();
+    // let mut codegen_backend = LLVMCodeGenerator::default();
+    let mut codegen_backend = ASMCodeGenerator::default();
 
-    // let output = match generate_program(program, &mut llvm_codegen) {
-    //     Ok(output) => output,
-    //     Err(e) => {
-    //         eprintln!("codegen error: {:?}", e);
-    //         return;
-    //     }
-    // };
+    let output = match generate_program(program_tree, &mut codegen_backend) {
+        Ok(output) => output,
+        Err(e) => {
+            eprintln!("codegen error: {:?}", e);
+            return;
+        }
+    };
 
-    // println!("{}", output);
+    println!("{}", output);
 
-    // write_file(String::from("out.asm"), &output);
-    // assemble_and_link("out.asm", "out");
+    write_file(String::from("out.asm"), &output);
+    assemble_and_link("out.asm", "out");
 }
