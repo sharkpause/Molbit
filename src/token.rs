@@ -43,9 +43,9 @@ pub enum TokenKind {
 }
 
 impl Token {
-    pub fn same_variant(&self, other: &Token) -> bool {
-        return discriminant(&self.kind) == discriminant(&other.kind);
-    }
+    // pub fn same_variant(&self, other: &Token) -> bool {
+    //     return discriminant(&self.kind) == discriminant(&other.kind);
+    // }
 
     pub fn same_kind(&self, other: &TokenKind) -> bool {
         return discriminant(&self.kind) == discriminant(&other);
