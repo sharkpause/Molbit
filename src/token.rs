@@ -1,5 +1,14 @@
-#[derive(Clone, Debug, PartialEq)]
-pub enum Token {
+use std::mem::discriminant;
+
+#[derive(Debug, Clone)]
+pub struct Token {
+    pub kind: TokenKind,
+    pub line: usize,
+    pub column: usize,
+}
+
+#[derive(Debug, Clone)]
+pub enum TokenKind {
     Return,
     IntLiteral(i64),
     Semicolon,
@@ -30,41 +39,19 @@ pub enum Token {
     Or,
     Not,
     Break,
-    Continue
+    Continue,
+}
+
+impl Token {
+    pub fn same_variant(&self, other: &Token) -> bool {
+        return discriminant(&self.kind) == discriminant(&other.kind);
+    }
+
+    pub fn same_kind(&self, other: &TokenKind) -> bool {
+        return discriminant(&self.kind) == discriminant(&other);
+    }
 }
 
 pub fn print_token(token: &Token) {
-    match token {
-        Token::Return => println!("Return"),
-        Token::IntLiteral(n) => println!("integer {}", n),
-        Token::Semicolon => println!("Semicolon"),
-        Token::LeftBrace => println!("Left brace"),
-        Token::RightBrace => println!("Right brace"),
-        Token::LeftParentheses => println!("Left parentheses"),
-        Token::RightParentheses => println!("Right parentheses"),
-        Token::Function => println!("Function keyword"),
-        Token::IntType => println!("Integer type"),
-        Token::Identifier(s) => println!("Identifier {}", s),
-        Token::Plus => println!("Plus"),
-        Token::Minus => println!("Minus"),
-        Token::Star => println!("Star"),
-        Token::Slash => println!("Slash"),
-        Token::Var => println!("Variable"),
-        Token::Equal => println!("Equal"),
-        Token::Comma => println!("Comma"),
-        Token::If => println!("If"),
-        Token::Else => println!("Else"),
-        Token::While => println!("While"),
-        Token::DoubleEqual => println!("DoubleEqual"),
-        Token::NotEqual => println!("NotEqual"),
-        Token::LessThan => println!("LessThan"),
-        Token::GreaterThan => println!("GreaterThan"),
-        Token::LessEqual => println!("LessEqualThan"),
-        Token::GreaterEqual => println!("LessGreaterThan"),
-        Token::And => println!("And"),
-        Token::Or => println!("Or"),
-        Token::Not => println!("Not"),
-        Token::Break => println!("Break"),
-        Token::Continue => println!("Continue")
-    }
+    println!("{:?}", token);
 }

@@ -7,7 +7,9 @@ pub enum CodegenError {
     GenericError,
     UndefinedVariable(String),
     InvalidBreak,
-    InvalidContinue
+    InvalidContinue,
+    UnknownExpression,
+    UnknownStatement
 }
 
 pub trait Backend {

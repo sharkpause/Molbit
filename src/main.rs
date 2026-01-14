@@ -1,8 +1,9 @@
 mod token;
 mod lexer;
 mod parser;
-mod backend;
-mod backends;
+// mod backend;
+// mod backends;
+// mod semantic_analyzer;
 
 use std::{env, fs, process::Command};
 
@@ -12,8 +13,9 @@ use crate::parser::Parser;
 use crate::parser::TopLevel;
 use crate::parser::Statement;
 use crate::parser::Expression;
-use crate::backend::generate_program;
-use crate::backends::LLVMCodeGenerator;
+// use crate::backend::generate_program;
+// use crate::backends::LLVMCodeGenerator;
+// use crate::semantic_analyzer::validate;
 
 fn read_file(path: &String) -> String {
     let source_code =
@@ -154,7 +156,6 @@ fn print_expression(expr: &Expression, indent: usize) {
     }
 }
 
-
 fn main() {
     let args: Vec<String> = env::args().collect();
 
@@ -165,10 +166,7 @@ fn main() {
 
     let input = read_file(&args[1]);
 
-    let mut lexer = Lexer {
-        input,
-        index: 0,
-    };
+    let mut lexer = Lexer::from(input);
 
     let tokens = match lexer.tokenize() {
         Ok(tokens) => tokens,
@@ -206,18 +204,20 @@ fn main() {
         }
     }
 
-    let mut llvm_codegen = LLVMCodeGenerator::default();
+    // let mut semantic_analyzer = 
 
-    let output = match generate_program(program, &mut llvm_codegen) {
-        Ok(output) => output,
-        Err(e) => {
-            eprintln!("codegen error: {:?}", e);
-            return;
-        }
-    };
+    // let mut llvm_codegen = LLVMCodeGenerator::default();
 
-    println!("{}", output);
+    // let output = match generate_program(program, &mut llvm_codegen) {
+    //     Ok(output) => output,
+    //     Err(e) => {
+    //         eprintln!("codegen error: {:?}", e);
+    //         return;
+    //     }
+    // };
 
-    write_file(String::from("out.asm"), &output);
-    assemble_and_link("out.asm", "out");
+    // println!("{}", output);
+
+    // write_file(String::from("out.asm"), &output);
+    // assemble_and_link("out.asm", "out");
 }

@@ -1,4 +1,6 @@
-use crate::token::Token;
+use std::mem::discriminant;
+
+use crate::{lexer::LexerError, token::{ Token, TokenKind }};
 
 #[derive(Debug)]
 pub enum ParserError {
@@ -119,50 +121,48 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn expect_token(&mut self, expected: &Token) -> Result<(), ParserError> {
-        match self.peek_token(0) {
-            Some(token) if token == expected  => {
-                self.consume_token();
-                return Ok(());
-            },
-            Some(token) => {
-                return Err(ParserError::UnexpectedToken(token.clone()));
-            },
-            None => {
-                return Err(ParserError::UnexpectedEndOfInput);
-            }
+    fn peek_token(&self, offset: usize) -> Option<&Token> {
+        return self.tokens.get(self.index + offset);
+    }
+
+    fn consume_token(&mut self) {
+        self.index += 1;
+    }
+
+    pub fn expect_token(&mut self, expected: &TokenKind) -> Result<(), ParserError> {
+        let token = self.peek_token(0).ok_or(ParserError::UnexpectedEndOfInput)?;
+        
+         if token.same_kind(expected) {
+            self.consume_token();
+            Ok(())
+        } else {
+            Err(ParserError::UnexpectedToken(token.clone()))
         }
     }
 
     pub fn expect_type(&mut self) -> Result<Type, ParserError> {
-        match self.peek_token(0) {
-            Some(Token::IntType) => {
+        let token = self
+            .peek_token(0)
+            .ok_or(ParserError::UnexpectedEndOfInput)?;
+
+        match &token.kind {
+            TokenKind::IntType => {
                 self.consume_token();
-                return Ok(Type::Int);
+                Ok(Type::Int)
             },
-            Some(_type) => {
-                return Err(ParserError::UnexpectedToken(_type.clone()));
-            },
-            None => {
-                return Err(ParserError::UnexpectedEndOfInput);
-            }
+            _ => Err(ParserError::UnexpectedToken(token.clone())),
         }
     }
 
-    pub fn expect_identifer(&mut self) -> Result<String, ParserError> {
-        match self.peek_token(0) {
-            Some(Token::Identifier(value)) => {
-                let temp = value.clone();
-                self.consume_token();
+    pub fn expect_identifier(&mut self) -> Result<String, ParserError> {
+        let token = self.peek_token(0).ok_or(ParserError::UnexpectedEndOfInput)?;
 
-                return Ok(temp);
-            },
-            Some(token) => {
-                return Err(ParserError::UnexpectedToken(token.clone()));
-            },
-            None => {
-                return Err(ParserError::UnexpectedEndOfInput);
-            }
+        if let TokenKind::Identifier(value) = &token.kind {
+            let name = value.clone();
+            self.consume_token();
+            Ok(name)
+        } else {
+            Err(ParserError::UnexpectedToken(token.clone()))
         }
     }
 
@@ -181,34 +181,34 @@ impl Parser {
         lowest
         */
 
-        return match token {
-            Token::Or => Some(1),
-            Token::And => Some(2),
-            Token::DoubleEqual | Token::NotEqual => Some(3),
-            Token::LessThan | Token::LessEqual => Some(4),
-            Token::GreaterThan | Token::GreaterEqual => Some(5),
-            Token::Plus | Token::Minus => Some(6),
-            Token::Star | Token::Slash => Some(7),
-            Token::Not => Some(8),
+        return match &token.kind {
+            TokenKind::Or => Some(1),
+            TokenKind::And => Some(2),
+            TokenKind::DoubleEqual | TokenKind::NotEqual => Some(3),
+            TokenKind::LessThan | TokenKind::LessEqual => Some(4),
+            TokenKind::GreaterThan | TokenKind::GreaterEqual => Some(5),
+            TokenKind::Plus | TokenKind::Minus => Some(6),
+            TokenKind::Star | TokenKind::Slash => Some(7),
+            TokenKind::Not => Some(8),
             _ => None
         };
     }
 
     fn token_to_operator(&self, token: &Token) -> Option<Operator> {
-        return match token {
-            Token::Plus => Some(Operator::Add),
-            Token::Minus => Some(Operator::Subtract),
-            Token::Star => Some(Operator::Multiply),
-            Token::Slash => Some(Operator::Divide),
-            Token::DoubleEqual => Some(Operator::Equal),
-            Token::NotEqual => Some(Operator::NotEqual),
-            Token::LessThan => Some(Operator::LessThan),
-            Token::LessEqual => Some(Operator::LessEqual),
-            Token::GreaterThan => Some(Operator::GreaterThan),
-            Token::GreaterEqual => Some(Operator::GreaterEqual),
-            Token::Not => Some(Operator::Not),
-            Token::And => Some(Operator::And),
-            Token::Or => Some(Operator::Or),
+        return match &token.kind {
+            TokenKind::Plus => Some(Operator::Add),
+            TokenKind::Minus => Some(Operator::Subtract),
+            TokenKind::Star => Some(Operator::Multiply),
+            TokenKind::Slash => Some(Operator::Divide),
+            TokenKind::DoubleEqual => Some(Operator::Equal),
+            TokenKind::NotEqual => Some(Operator::NotEqual),
+            TokenKind::LessThan => Some(Operator::LessThan),
+            TokenKind::LessEqual => Some(Operator::LessEqual),
+            TokenKind::GreaterThan => Some(Operator::GreaterThan),
+            TokenKind::GreaterEqual => Some(Operator::GreaterEqual),
+            TokenKind::Not => Some(Operator::Not),
+            TokenKind::And => Some(Operator::And),
+            TokenKind::Or => Some(Operator::Or),
             _ => None
         }
     }
@@ -217,41 +217,44 @@ impl Parser {
         let mut program: Vec<TopLevel> = Vec::new();
 
         while self.index < self.tokens.len() {
-            match self.peek_token(0) {
-                Some(Token::Function) => {
+            let token = self.peek_token(0).ok_or(ParserError::UnexpectedEndOfInput)?;
+            match &token.kind {
+                TokenKind::Function => {
                     let function = self.parse_function()?;
                     program.push(TopLevel::Function(function));
                 },
                 _ => {
-                    let current_statement = self.parse_statement()?;
-                    program.push(TopLevel::Statement(current_statement));
+                    let statement = self.parse_statement()?;
+                    program.push(TopLevel::Statement(statement));
                 }
             }
         }
 
-        return Ok(program);
+        Ok(program)
     }
 
     pub fn parse_function(&mut self) -> Result<Function, ParserError> {
-        self.expect_token(&Token::Function)?;
+        self.expect_token(&TokenKind::Function)?;
 
         let return_type = self.expect_type()?;
 
-        let function_name = self.expect_identifer()?;
+        let function_name = self.expect_identifier()?;
 
-        self.expect_token(&Token::LeftParentheses)?;
+        self.expect_token(&TokenKind::LeftParentheses)?;
 
         let mut parameters: Vec<(Type, String)> = Vec::new();
-        if !matches!(self.peek_token(0), Some(Token::RightParentheses)) {
-            loop {
-                let parameter_type = self.expect_type()?;
-                let parameter_name = self.expect_identifer()?;
-                parameters.push((parameter_type, parameter_name));
-
-                if matches!(self.peek_token(0), Some(Token::Comma)) {
+        while let Some(token) = self.peek_token(0) {
+            if token.same_kind(&TokenKind::RightParentheses) {
+                break;
+            }
+        
+            let parameter_type = self.expect_type()?;
+            let parameter_name = self.expect_identifier()?;
+            parameters.push((parameter_type, parameter_name));
+        
+            if let Some(tok) = self.peek_token(0) {
+                if tok.same_kind(&TokenKind::Comma) {
                     self.consume_token();
-                } else {
-                    break;
                 }
             }
         }
@@ -267,10 +270,10 @@ impl Parser {
     }
 
     pub fn parse_block(&mut self) -> Result<Statement, ParserError> {
-        self.expect_token(&Token::LeftBrace)?;
+        self.expect_token(&TokenKind::LeftBrace)?;
         let statements = self.parse_statements()?;
 
-        self.expect_token(&Token::RightBrace)?;
+        self.expect_token(&TokenKind::RightBrace)?;
 
         return Ok(Statement::Block{ statements });
     }
@@ -279,7 +282,7 @@ impl Parser {
         let mut statements = Vec::new();
 
         while let Some(token) = self.peek_token(0) {
-            if matches!(token, Token::RightBrace) {
+            if token.same_kind(&TokenKind::RightBrace) {
                 break;
             }
             let statement = self.parse_statement()?;
@@ -290,237 +293,241 @@ impl Parser {
     }
 
     pub fn parse_statement(&mut self) -> Result<Statement, ParserError> {
-        match self.peek_token(0) {
-            Some(Token::LeftBrace) => {
-                return self.parse_block();
-            },
-            Some(Token::Return) => {
-                self.consume_token();
+        let token = self.peek_token(0)
+            .ok_or(ParserError::UnexpectedEndOfInput)?;
 
+        match &token.kind {
+            TokenKind::LeftBrace => self.parse_block(),
+
+            TokenKind::Return => {
+                self.consume_token();
+                
                 let expression = self.parse_expression(0)?;
+                self.expect_token(&TokenKind::Semicolon)?;
+                
+                Ok(Statement::Return { value: expression })
+            }
 
-                self.expect_token(&Token::Semicolon)?;
-
-                return Ok(Statement::Return{ value: expression });
-            },
-            Some(Token::Var) => {
+            TokenKind::Var => {
                 self.consume_token();
+                
                 let variable_type = self.expect_type()?;
-                let variable_name = self.expect_identifer()?;
-                self.expect_token(&Token::Equal)?;
+                let variable_name = self.expect_identifier()?;
+                
+                self.expect_token(&TokenKind::Equal)?;
                 let initializer = self.parse_expression(0)?;
-
-                self.expect_token(&Token::Semicolon)?;
-
-                return Ok(Statement::VariableDeclare{
+                
+                self.expect_token(&TokenKind::Semicolon)?;
+                
+                Ok(Statement::VariableDeclare {
                     var_type: variable_type,
                     name: variable_name,
-                    initializer
-                });
-            },
-            Some(Token::Identifier(name)) => {
-                let name = name.clone();
+                    initializer,
+                })
+            }
 
-                if matches!(self.peek_token(1), Some(Token::Equal)) {
-                    self.consume_token(); // name
-                    self.consume_token(); // =
-
-                    let expression = self.parse_expression(0)?;
-                    self.expect_token(&Token::Semicolon)?;
-
-                    return Ok(Statement::VariableAssignment{ name: name.to_string(), value: expression });
-                } else {
-                    let expression = self.parse_expression(0)?;
-                    self.expect_token(&Token::Semicolon)?;
-
-                    return Ok(Statement::Expression{ expression });
-                }
-            },
-            Some(Token::If) => {
-                let mut conditions = Vec::new();
-                let mut bodies = Vec::new();
-
+            TokenKind::If => {
                 self.consume_token();
+                
+                let mut conditions = vec![self.parse_expression(0)?];
+                let mut bodies = vec![self.parse_block()?];
 
-                let condition = self.parse_expression(0)?;
-                let body = self.parse_block()?;
-
-                conditions.push(condition);
-                bodies.push(body);
-
-                while let Some(Token::Else) = self.peek_token(0) {
-                    if let Some(Token::If) = self.peek_token(1) {
-                        self.consume_token();
-                        self.consume_token();
-                        
-                        let condition = self.parse_expression(0)?;
-                        let body = self.parse_block()?;
-
-                        conditions.push(condition);
-                        bodies.push(body);
+                // else if
+                while let Some(current_token) = self.peek_token(0) {
+                    if current_token.same_kind(&TokenKind::Else) {
+                        if let Some(next_token) = self.peek_token(1) {
+                            if next_token.same_kind(&TokenKind::If) {
+                                self.consume_token(); // else
+                                self.consume_token(); // if
+                                conditions.push(self.parse_expression(0)?);
+                                bodies.push(self.parse_block()?);
+                                continue;
+                            }
+                        }
+                        break;
                     } else {
                         break;
                     }
                 }
 
-                let else_body = if let Some(Token::Else) = self.peek_token(0) {
-                    self.consume_token();
-                    Some(Box::new(self.parse_block()?))
+                let else_body = if let Some(tok) = self.peek_token(0) {
+                    if tok.same_kind(&TokenKind::Else) {
+                        self.consume_token();
+                        Some(Box::new(self.parse_block()?))
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 };
 
+                // parse nested ifs
                 let mut result = else_body;
-                for (condition, body)
-                    in conditions.iter().rev()
-                            .zip(bodies.iter().rev()) {
-                    result = Some(Box::new(Statement::If{
-                        condition: condition.clone(),
+                for (cond, body) in conditions.iter().rev().zip(bodies.iter().rev()) {
+                    result = Some(Box::new(Statement::If {
+                        condition: cond.clone(),
                         then_branch: Box::new(body.clone()),
-                        else_branch: result
+                        else_branch: result,
                     }));
                 }
 
-                return Ok(*result.expect("Internal parser error: expected at least one if/else branch. Something fucked up"));
-            },
-            Some(Token::While) => {
-                self.consume_token();
-
-                self.expect_token(&Token::LeftParentheses)?;
-                let condition = self.parse_expression(0)?;
-                self.expect_token(&Token::RightParentheses)?;
-
-                let body = Box::new(self.parse_statement()?);
-
-                return Ok(Statement::While {
-                    condition,
-                    body
-                });
-            },
-            Some(Token::Break) => {
-                self.consume_token();
-                self.expect_token(&Token::Semicolon);
-                return Ok(Statement::Break);
-            },
-            Some(Token::Continue) => {
-                self.consume_token();
-                self.expect_token(&Token::Semicolon);
-                return Ok(Statement::Continue);
-            },
-            Some(token) => {
-                return Err(ParserError::UnexpectedToken(token.clone()));
-            },
-            _ => {
-                return Err(ParserError::UnexpectedEndOfInput);
+                Ok(*result.expect("Expected at least one if/else branch"))
             }
-        }
+
+            TokenKind::While => {
+                self.consume_token();
+                
+                self.expect_token(&TokenKind::LeftParentheses)?;
+                let condition = self.parse_expression(0)?;
+                
+                self.expect_token(&TokenKind::RightParentheses)?;
+                let body = Box::new(self.parse_statement()?);
+                
+                Ok(Statement::While { condition, body })
+            }
+
+            TokenKind::Break => {
+                self.consume_token();
+                self.expect_token(&TokenKind::Semicolon)?;
+                
+                Ok(Statement::Break)
+            }
+
+            TokenKind::Continue => {
+                self.consume_token();
+                self.expect_token(&TokenKind::Semicolon)?;
+                
+                Ok(Statement::Continue)
+            }
+
+            TokenKind::Identifier(_) => {
+                let name = if let TokenKind::Identifier(n) = &token.kind {
+                    n.clone()
+                } else { unreachable!() };
+
+                if let Some(next_token) = self.peek_token(1) {
+                    if next_token.same_kind(&TokenKind::Equal) {
+                        self.consume_token(); // identifier
+                        self.consume_token(); // =
+                        let expression = self.parse_expression(0)?;
+                        self.expect_token(&TokenKind::Semicolon)?;
+                        return Ok(Statement::VariableAssignment { name, value: expression });
+                    }
+                }
+
+                // fallback to expression
+                let expression = self.parse_expression(0)?;
+                self.expect_token(&TokenKind::Semicolon)?;
+                
+                Ok(Statement::Expression { expression })
+            }
+
+        _ => Err(ParserError::UnexpectedToken(token.clone())),
     }
+}
 
     pub fn parse_expression(&mut self, min_bp: u8) -> Result<Expression, ParserError> {
-        let current_token =
-            self.peek_token(0).ok_or(ParserError::UnexpectedEndOfInput)?.clone();
+        let current_token = self
+            .peek_token(0)
+            .ok_or(ParserError::UnexpectedEndOfInput)?;
 
-        let mut lhs = match current_token {
-            Token::Identifier(name) => {
+        let mut lhs = match &current_token.kind {
+            TokenKind::Identifier(name) => {
+                let name = name.clone();
                 self.consume_token();
-
-                // parse function arguments
-                if matches!(self.peek_token(0), Some(Token::LeftParentheses)) {
-                    self.consume_token();
                     
+                if !self.peek_token(0).map_or(false, |tok| tok.same_kind(&TokenKind::LeftParentheses)) {
+                    Expression::Variable { name }
+                } else {
+                    self.consume_token(); // consume '('
                     let mut arguments = Vec::new();
                     
-                    if !matches!(self.peek_token(0), Some(Token::RightParentheses)) {
-                        loop {
-                            arguments.push(self.parse_expression(0)?);
-                            if matches!(self.peek_token(0), Some(Token::Comma)) {
-                                self.consume_token();
-                            } else {
-                                break;
-                            }
+                    while !self.peek_token(0).map_or(false, |tok| tok.same_kind(&TokenKind::RightParentheses)) {
+                        arguments.push(self.parse_expression(0)?);
+                    
+                        if self.peek_token(0).map_or(false, |tok| tok.same_kind(&TokenKind::Comma)) {
+                            self.consume_token();
+                        } else {
+                            break;
                         }
                     }
-
-                    self.expect_token(&Token::RightParentheses)?;
-                    
-                    Expression::FunctionCall{
-                        callee: Box::new(Expression::Variable{ name }),
-                        arguments
+                
+                    self.expect_token(&TokenKind::RightParentheses)?;
+                
+                    Expression::FunctionCall {
+                        callee: Box::new(Expression::Variable { name }),
+                        arguments,
                     }
-                } else {
-                    Expression::Variable{ name }
                 }
-            },
-            Token::IntLiteral(number) => {
-                self.consume_token();
-                Expression::IntLiteral{ value: number }
-            },
-            Token::LeftParentheses => {
-                self.consume_token();
+            }
 
-                let temp = self.parse_expression(0)?;
-                self.expect_token(&Token::RightParentheses)?;
-
-                temp
-            },
-            Token::Minus => {
+            TokenKind::IntLiteral(number) => {
+                let value = *number; // copy the i64
                 self.consume_token();
+                
+                Expression::IntLiteral { value }
+            }
 
+            TokenKind::LeftParentheses => {
+                self.consume_token();
+                let parsed_expression = self.parse_expression(0)?;
+                self.expect_token(&TokenKind::RightParentheses)?;
+                
+                parsed_expression
+            }
+
+            TokenKind::Minus => {
+                self.consume_token();
                 let expression = self.parse_expression(6)?;
+                
+                Expression::UnaryOperation {
+                    operator: Operator::Subtract,
+                    operand: Box::new(expression),
+                }
+            }
 
-                Expression::UnaryOperation{ operator: Operator::Subtract, operand: Box::new(expression) }
-            },
-            Token::Not => {
+            TokenKind::Not => {
                 self.consume_token();
-
                 let expression = self.parse_expression(8)?;
+                
+                Expression::UnaryOperation {
+                    operator: Operator::Not,
+                    operand: Box::new(expression),
+                }
+            }
 
-                Expression::UnaryOperation{ operator: Operator::Not, operand: Box::new(expression) }
-            }
-            _ => {
-                return Err(ParserError::UnexpectedToken(current_token));
-            }
+            _ => return Err(ParserError::UnexpectedToken(current_token.clone())),
         };
+
         loop {
-            let operator_token =
-                self.peek_token(0).cloned().ok_or(ParserError::UnexpectedEndOfInput)?;
+            let operator_token = self
+                .peek_token(0)
+                .cloned()
+                .ok_or(ParserError::UnexpectedEndOfInput)?;
 
-            let binding_power = self.binding_power(&operator_token);
-            
-            match binding_power {
-                Some(bp) => {
-                    if bp < min_bp {
-                        break;
-                    }
+            let bp = self.binding_power(&operator_token);
 
+            match bp {
+                Some(bp) if bp >= min_bp => {
                     self.consume_token();
                     let rhs_min_bp = bp + 1;
-                    let rhs =
-                        self.parse_expression(rhs_min_bp)?;
+                    let rhs = self.parse_expression(rhs_min_bp)?;
 
-                    let operator = self.token_to_operator(&operator_token)
+                    let operator = self
+                        .token_to_operator(&operator_token)
                         .ok_or(ParserError::UnexpectedToken(operator_token))?;
 
-                    lhs = Expression::BinaryOperation{
+                    lhs = Expression::BinaryOperation {
                         left: Box::new(lhs),
                         operator,
-                        right: Box::new(rhs)
+                        right: Box::new(rhs),
                     };
-                },
-                None => {
-                    break;
                 }
-            };
+                _ => break,
+            }
         }
 
-        return Ok(lhs);
+        Ok(lhs)
     }
 
-    fn peek_token(&self, offset: usize) -> Option<&Token> {
-        return self.tokens.get(self.index + offset);
-    }
-
-    fn consume_token(&mut self) {
-        self.index += 1;
-    }
 }
