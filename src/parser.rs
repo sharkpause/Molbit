@@ -1,5 +1,3 @@
-use std::mem::discriminant;
-
 use crate::{lexer::LexerError, token::{ Token, TokenKind }};
 
 #[derive(Debug)]
