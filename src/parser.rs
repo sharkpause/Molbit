@@ -24,7 +24,7 @@ pub enum TopLevel {
 #[derive(Debug, Clone)]
 pub enum Statement {
     Return {
-        value: Expression,
+        value: Option<Expression>,
         span: Span,
     },
 
@@ -361,11 +361,17 @@ impl Parser {
 
             TokenKind::Return => {
                 self.consume_token();
-                
-                let expression = self.parse_expression(0)?;
-                self.expect_token(&TokenKind::Semicolon)?;
-                
-                return Ok(Statement::Return { value: expression, span });
+
+                match self.expect_token(&TokenKind::Semicolon) {
+                    Ok(_) => {
+                        return Ok(Statement::Return { value: None, span });
+                    },
+                    Err(_) => {
+                        let expression = self.parse_expression(0)?;
+
+                        return Ok(Statement::Return { value: Some(expression), span });   
+                    }
+                }
             }
 
             TokenKind::Var => {
