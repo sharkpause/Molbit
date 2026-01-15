@@ -73,6 +73,23 @@ pub enum Statement {
     },
 }
 
+impl Statement {
+    pub fn span(&self) -> Span {
+        match self {
+            Statement::Return { span, .. } => *span,
+            Statement::VariableDeclare { span, .. } => *span,
+            Statement::VariableAssignment { span, .. } => *span,
+            Statement::Block { span, .. } => *span,
+            Statement::Expression { span, .. } => *span,
+            Statement::If { span, .. } => *span,
+            Statement::While { span, .. } => *span,
+            Statement::Break { span } => *span,
+            Statement::Continue { span } => *span,
+        }
+    }
+}
+
+
 #[derive(Debug, Clone)]
 pub enum Expression {
     Variable {
