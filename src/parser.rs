@@ -99,7 +99,7 @@ pub enum Expression {
     },
 
     FunctionCall {
-        callee: Box<Expression>,
+        called: Box<Expression>,
         arguments: Vec<Expression>,
         span: Span,
     },
@@ -504,7 +504,7 @@ impl Parser {
                     self.expect_token(&TokenKind::RightParentheses)?;
                 
                     Expression::FunctionCall {
-                        callee: Box::new(Expression::Variable { name, span }),
+                        called: Box::new(Expression::Variable { name, span }),
                         arguments,
                         span
                     }
