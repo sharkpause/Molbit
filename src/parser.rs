@@ -367,7 +367,9 @@ impl Parser {
                         return Ok(Statement::Return { value: None, span });
                     },
                     Err(_) => {
+                        println!("{:?}", self.peek_token(0));
                         let expression = self.parse_expression(0)?;
+                        self.expect_token(&TokenKind::Semicolon);
 
                         return Ok(Statement::Return { value: Some(expression), span });   
                     }
@@ -487,6 +489,8 @@ impl Parser {
                 let expression = self.parse_expression(0)?;
                 self.expect_token(&TokenKind::Semicolon)?;
                 
+                // An expression evaluated for its side effects. Yeah this looks weird
+                // Currently used primarily for function calls where the return value is discarded.
                 return Ok(Statement::Expression { expression, span });
             }
 
@@ -498,6 +502,7 @@ impl Parser {
         let current_token = self
             .peek_token(0)
             .ok_or(ParserError::UnexpectedEndOfInput)?;
+
         let span = Span {
             line: current_token.line,
             column: current_token.column
