@@ -40,6 +40,7 @@ pub enum TokenKind {
     Not,
     Break,
     Continue,
+    Null
 }
 
 impl Token {

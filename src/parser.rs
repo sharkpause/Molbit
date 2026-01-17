@@ -1,4 +1,5 @@
 use crate::{lexer::LexerError, token::{ Token, TokenKind }};
+use std::mem::discriminant;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Span {
@@ -24,7 +25,7 @@ pub enum TopLevel {
 #[derive(Debug, Clone)]
 pub enum Statement {
     Return {
-        value: Option<Expression>,
+        value: Expression,
         span: Span,
     },
 
@@ -97,7 +98,7 @@ pub enum Expression {
         span: Span,
     },
 
-    IntLiteral {
+    IntLiteral64 {
         value: i64,
         span: Span,
     },
@@ -120,11 +121,32 @@ pub enum Expression {
         arguments: Vec<Expression>,
         span: Span,
     },
+
+    Null {
+        span: Span
+    }
+}
+
+impl Expression {
+    // pub fn same_kind(&self, other: &Expression) -> bool {
+    //     return discriminant(self) == discriminant(other);
+    // }
+
+    // pub fn is_null(&self) -> bool {
+    //     return matches!(self, Expression::Null { .. })
+    // }
 }
 
 #[derive(Debug, Clone)]
 pub enum Type {
-    Int,
+    Int64,
+    Null
+}
+
+impl Type {
+    pub fn same_kind(&self, other: &Type) -> bool {
+        return discriminant(self) == discriminant(other);
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -194,8 +216,12 @@ impl Parser {
         match &token.kind {
             TokenKind::IntType => {
                 self.consume_token();
-                Ok(Type::Int)
+                return Ok(Type::Int64);
             },
+            TokenKind::Null => {
+                self.consume_token();
+                return Ok(Type::Null);
+            }
             _ => Err(ParserError::UnexpectedToken(token.clone())),
         }
     }
@@ -364,14 +390,13 @@ impl Parser {
 
                 match self.expect_token(&TokenKind::Semicolon) {
                     Ok(_) => {
-                        return Ok(Statement::Return { value: None, span });
+                        return Ok(Statement::Return { value: Expression::Null { span }, span });
                     },
                     Err(_) => {
-                        println!("{:?}", self.peek_token(0));
                         let expression = self.parse_expression(0)?;
                         self.expect_token(&TokenKind::Semicolon);
 
-                        return Ok(Statement::Return { value: Some(expression), span });   
+                        return Ok(Statement::Return { value: expression, span });   
                     }
                 }
             }
@@ -475,12 +500,16 @@ impl Parser {
                     n.clone()
                 } else { unreachable!() };
 
+                // Evaluate an assignment
                 if let Some(next_token) = self.peek_token(1) {
                     if next_token.same_kind(&TokenKind::Equal) {
                         self.consume_token(); // identifier
                         self.consume_token(); // =
+
                         let expression = self.parse_expression(0)?;
+                        
                         self.expect_token(&TokenKind::Semicolon)?;
+                        
                         return Ok(Statement::VariableAssignment { name, value: expression, span });
                     }
                 }
@@ -537,14 +566,19 @@ impl Parser {
                         span
                     }
                 }
-            }
+            },
 
             TokenKind::IntLiteral(number) => {
                 let value = *number; // copy the i64
                 self.consume_token();
                 
-                Expression::IntLiteral { value, span }
-            }
+                Expression::IntLiteral64 { value, span }
+            },
+
+            TokenKind::Null => {
+                self.consume_token();
+                Expression::Null { span }
+            },
 
             TokenKind::LeftParentheses => {
                 self.consume_token();
@@ -552,7 +586,7 @@ impl Parser {
                 self.expect_token(&TokenKind::RightParentheses)?;
                 
                 parsed_expression
-            }
+            },
 
             TokenKind::Minus => {
                 self.consume_token();
@@ -563,7 +597,7 @@ impl Parser {
                     operand: Box::new(expression),
                     span
                 }
-            }
+            },
 
             TokenKind::Not => {
                 self.consume_token();
@@ -574,7 +608,7 @@ impl Parser {
                     operand: Box::new(expression),
                     span
                 }
-            }
+            },
 
             _ => return Err(ParserError::UnexpectedToken(current_token.clone())),
         };

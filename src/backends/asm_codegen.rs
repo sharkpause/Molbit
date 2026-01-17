@@ -150,13 +150,7 @@ impl ASMCodeGenerator {
                 return Ok(statements_code);
             },
             Statement::Return{ value: expression, span } => {
-                match expression {
-                    Some(expr) => {
-                        output.push_str(&self.generate_expression(&expr)?);
-                    },
-                    None => {}
-                }
-                
+                output.push_str(&self.generate_expression(&expression)?);
                 
                 output.push_str(
                     "\tmov rsp, rbp\n\
@@ -170,9 +164,12 @@ impl ASMCodeGenerator {
                 let stack_offset;
                 
                 match var_type {
-                    Type::Int => {
+                    Type::Int64 => {
                         self.stack_size += 8;
                         stack_offset = self.stack_size - 8;
+                    },
+                    Type::Null => {
+                        stack_offset = self.stack_size;       
                     }
                 }
 
@@ -299,8 +296,11 @@ impl ASMCodeGenerator {
 
                 output.push_str(&format!("\tmov rax, [rbp - {}]\n", offset));
             },
-            Expression::IntLiteral{ value, span } => {
+            Expression::IntLiteral64{ value, span } => {
                 output.push_str(&format!("\tmov rax, {}\n", value));
+            },
+            Expression::Null { span } => {
+                output.push_str(&format!("\tmov rax, 0\n"));
             },
             Expression::UnaryOperation{ operator, operand: inner, span } => {
                 output.push_str(&self.generate_expression(inner)?);

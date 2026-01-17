@@ -7,7 +7,7 @@ mod semantic_analyzer;
 
 use std::{env, fs, process::Command};
 
-use crate::semantic_analyzer::{ SemanticAnalyzer, SemanticError };
+use crate::semantic_analyzer::{ SemanticAnalyzer, SemanticError, Diagnostics };
 use crate::token::print_token;
 use crate::lexer::{ Lexer, LexerError };
 use crate::parser::{ Parser, TopLevel, Statement, Expression, ParserError };
@@ -53,15 +53,8 @@ fn print_statement(stmt: &Statement, indent: usize) {
 
     match stmt {
         Statement::Return { value, span } => {
-            match value {
-                Some(val) => {
-                    println!("{}Return:", padding);
-                    print_expression(val, indent + 1);
-                },
-                None => {
-                    println!("{}Return", padding)
-                }
-            }
+            println!("{}Return:", padding);
+            print_expression(value, indent + 1);
         }
 
         Statement::VariableDeclare {
@@ -134,9 +127,9 @@ fn print_expression(expr: &Expression, indent: usize) {
             println!("{}Variable {}", padding, name);
         }
 
-        Expression::IntLiteral { value, span } => {
+        Expression::IntLiteral64 { value, span } => {
             println!("{}Int {}", padding, value);
-        }
+        },
 
         Expression::UnaryOperation { operator, operand, span } => {
             println!("{}Unary {:?}", padding, operator);
@@ -159,6 +152,126 @@ fn print_expression(expr: &Expression, indent: usize) {
             print_expression(callee, indent + 1);
             for arg in arguments {
                 print_expression(arg, indent + 1);
+            }
+        },
+
+        Expression::Null { span } => {
+            println!("{}Null", padding);
+        }
+    }
+}
+
+pub fn print_semantic_errors(diagnostics: &Diagnostics) {
+    for error in diagnostics.errors.iter() {
+        match error {
+            SemanticError::NoEntryFunction => {
+                eprintln!("Semantic error: no 'entry' function found");
+            }
+
+            SemanticError::MainIsReserved { span } => {
+                eprintln!(
+                    "Semantic error at {}:{}: 'main' is a reserved function name",
+                    span.line, span.column
+                );
+            }
+
+            SemanticError::DuplicateVariable { name, span } => {
+                eprintln!(
+                    "Semantic error at {}:{}: duplicate variable '{}'",
+                    span.line, span.column, name
+                );
+            }
+
+            SemanticError::DuplicateFunction { name, span } => {
+                eprintln!(
+                    "Semantic error at {}:{}: duplicate function '{}'",
+                    span.line, span.column, name
+                );
+            }
+
+            SemanticError::DuplicateParameter { name, span } => {
+                eprintln!(
+                    "Semantic error at {}:{}: duplicate parameter '{}'",
+                    span.line, span.column, name
+                );
+            }
+
+            SemanticError::UndefinedVariable { name, span } => {
+                eprintln!(
+                    "Semantic error at {}:{}: undefined variable '{}'",
+                    span.line, span.column, name
+                );
+            }
+
+            SemanticError::UndefinedFunction { name, span } => {
+                eprintln!(
+                    "Semantic error at {}:{}: undefined function '{}'",
+                    span.line, span.column, name
+                );
+            }
+
+            SemanticError::MismatchedArgumentCount {
+                called_function_name,
+                provided_argument_count,
+                expected_argument_count,
+                span,
+            } => {
+                eprintln!(
+                    "Semantic error at {}:{}: function '{}' called with {} argument(s), but {} expected",
+                    span.line, span.column,
+                    called_function_name,
+                    provided_argument_count,
+                    expected_argument_count
+                );
+            }
+
+            SemanticError::BreakOutsideLoop { span } => {
+                eprintln!(
+                    "Semantic error at {}:{}: 'break' outside loop",
+                    span.line, span.column
+                );
+            }
+
+            SemanticError::ContinueOutsideLoop { span } => {
+                eprintln!(
+                    "Semantic error at {}:{}: 'continue' outside loop",
+                    span.line, span.column
+                );
+            }
+
+            SemanticError::InvalidTopLevelStatement { span } => {
+                eprintln!(
+                    "Semantic error at {}:{}: only functions are allowed at the top level",
+                    span.line, span.column
+                );
+            },
+
+            SemanticError::MismatchedReturnType { expected_return_type, provided_return_type, span } => {
+                eprintln!(
+                    "Semantic error at {}:{}, return value type of {:?} does not match the function's return type of {:?}",
+                    span.line, span.column, provided_return_type, expected_return_type
+                )
+            },
+
+            SemanticError::MismatchedBinaryOperationType { left_type, right_type, span } => {
+                eprintln!(
+                    "Semantic error at {}:{}, left operand type of {:?} does not match the right operand type of {:?}",
+                    span.line, span.column, left_type, right_type
+                )
+            },
+
+            SemanticError::MissingReturnType { expected, span } => {
+                eprintln!(
+                    "Semantic error at {}:{}, expected a return type of {:?}",
+                    span.line, span.column, *expected
+                )
+            },
+
+            SemanticError::MismatchedVariableType { name, expected_type, provided_type, span } => {
+                eprintln!(
+                    "Semantic error at {}:{}, expected variable {} type of {:?} does not match the value's type of {:?}",
+                    span.line, span.column, name, expected_type, provided_type
+                )
             }
         }
     }
@@ -219,7 +332,7 @@ fn main() {
     for toplevel in &program_tree {
         match toplevel {
             TopLevel::Function(f) => {
-                println!("Function: {}", f.name);
+                println!("Function: {}, Return Type: {:?}", f.name, f.return_type);
                 print_statement(&f.body, 1);
             }
             TopLevel::Statement(s) => print_statement(&s, 1),
@@ -228,30 +341,9 @@ fn main() {
 
     let mut semantic_analyzer = SemanticAnalyzer::from(&program_tree);
     let diagnostics = semantic_analyzer.analyze();
+
     if diagnostics.has_errors() {
-        for error in diagnostics.errors.iter() {
-            match error {
-                SemanticError::NoEntryFunction => {
-                    eprintln!("Semantic error: no 'entry' function found");
-                }
-                SemanticError::MainIsReserved { span } => {
-                    eprintln!(
-                        "Semantic error at line {}, column {}: 'main' is a reserved function name",
-                        span.line, span.column
-                    );
-                }
-                SemanticError::InvalidTopLevelStatement { span } => {
-                    eprintln!(
-                        "Semantic error at line {}, column {}: Only functions are allowed at the top level",
-                        span.line,
-                        span.column
-                    );
-                }
-                _ => {
-                    eprintln!("Unknown semantic error");
-                }
-            }
-        }
+        print_semantic_errors(&diagnostics);
         return;
     }
 

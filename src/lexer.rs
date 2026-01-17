@@ -191,80 +191,106 @@ impl Lexer {
     }
 
     pub fn next_token(&mut self) -> Result<Token, LexerError> {
-        self.skip_whitespace();
+        loop {
+            self.skip_whitespace();
 
-        let current_char =
-            self.peek_char(0).ok_or(LexerError::EndOfInput)?;
+            let current_char =
+                self.peek_char(0).ok_or(LexerError::EndOfInput)?;
 
-        let start_line = self.line;
-        let start_column = self.column;
-        let mut token = String::new();
+            let start_line = self.line;
+            let start_column = self.column;
 
-        if current_char.is_digit(10) {
-            while let Some(character) = self.peek_char(0) {
-                if character.is_digit(10) {
-                    token.push(character);
-                    self.consume_char();
-                } else {
-                    if character.is_alphabetic() {
+            // --- handle comments ---
+            if current_char == '/' {
+                if let Some(next_char) = self.peek_char(1) {
+                    if next_char == '/' {
+                        // single-line comment
+                        self.consume_char();
+                        self.consume_char();
+                        while let Some(c) = self.peek_char(0) {
+                            if c == '\n' { break; }
+                            self.consume_char();
+                        }
+                        continue;
+                    } else if next_char == '*' {
+                        // multi-line comment
+                        self.consume_char();
+                        self.consume_char();
+                        while let Some(c) = self.peek_char(0) {
+                            if c == '*' {
+                                if let Some(nc) = self.peek_char(1) {
+                                    if nc == '/' {
+                                        self.consume_char();
+                                        self.consume_char();
+                                        break;
+                                    }
+                                }
+                            }
+                            self.consume_char();
+                        }
+                        continue;
+                    }
+                }
+            }
+
+            // --- handle digits ---
+            if current_char.is_digit(10) {
+                let mut token = String::new();
+                while let Some(character) = self.peek_char(0) {
+                    if character.is_digit(10) {
+                        token.push(character);
+                        self.consume_char();
+                    } else if character.is_alphabetic() {
                         return Err(LexerError::UnexpectedChar{
                             character, line: start_line, column: start_column
                         });
+                    } else {
+                        break;
                     }
-                    break;
                 }
-            }
 
-            let number: i64 =
-                token.parse().map_err(
-                |_| LexerError::UnexpectedChar {
+                let number: i64 = token.parse().map_err(|_| LexerError::UnexpectedChar {
                     character: token.chars().last().unwrap_or(' '),
-                    line: start_line, column: start_column
+                    line: start_line,
+                    column: start_column
                 })?;
-        
-            return Ok( Token {
-                kind: TokenKind::IntLiteral(number),
-                line: start_line,
-                column: start_column
-            });
-        } else if current_char.is_alphanumeric() {
-            if let Some(first) = self.peek_char(0) {
-                if first.is_alphabetic() || first == '_' {
-                    token.push(first);
-                    self.consume_char();
-                
-                    while let Some(character) = self.peek_char(0) {
-                        if character.is_alphanumeric() || character == '_' {
-                            token.push(character);
-                            self.consume_char();
-                        } else {
-                            break;
-                        }
-                    }
-                } else {
-                    return Err(LexerError::UnexpectedChar { character: first, line: start_line, column: start_column });
-                }
+
+                return Ok(Token { kind: TokenKind::IntLiteral(number), line: start_line, column: start_column });
             }
 
-            let kind = match token.as_str() {
-                "return" => Ok(TokenKind::Return),
-                "function" => Ok(TokenKind::Function),
-                "int" => Ok(TokenKind::IntType),
-                "var" => Ok(TokenKind::Var),
-                "if" => Ok(TokenKind::If),
-                "else" => Ok(TokenKind::Else),
-                "while" => Ok(TokenKind::While),
-                "break" => Ok(TokenKind::Break),
-                "continue" => Ok(TokenKind::Continue),
-                _ => Ok(TokenKind::Identifier(token)),
-            }?;
+            // --- handle identifiers / keywords ---
+            if current_char.is_alphabetic() || current_char == '_' {
+                let mut token = String::new();
+                token.push(current_char);
+                self.consume_char();
 
-            return Ok( Token {
-                kind,
-                line: start_line,
-                column: start_column
-            });
-        } else {
+                while let Some(c) = self.peek_char(0) {
+                    if c.is_alphanumeric() || c == '_' {
+                        token.push(c);
+                        self.consume_char();
+                    } else {
+                        break;
+                    }
+                }
+
+                let kind = match token.as_str() {
+                    "return" => TokenKind::Return,
+                    "function" => TokenKind::Function,
+                    "int" => TokenKind::IntType,
+                    "null" => TokenKind::Null,
+                    "var" => TokenKind::Var,
+                    "if" => TokenKind::If,
+                    "else" => TokenKind::Else,
+                    "while" => TokenKind::While,
+                    "break" => TokenKind::Break,
+                    "continue" => TokenKind::Continue,
+                    _ => TokenKind::Identifier(token),
+                };
+
+                return Ok(Token { kind, line: start_line, column: start_column });
+            }
+
+            // --- handle operators / symbols ---
             if let Some(token) = self.double_char_token() {
                 return Ok(token);
             } else if let Some(token) = self.single_char_token() {
