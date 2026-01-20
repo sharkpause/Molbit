@@ -110,7 +110,7 @@ struct VariableSymbol {
 }
 
 pub struct SemanticAnalyzer<'a> {
-    program_tree: &'a[TopLevel],
+    program_tree: &'a mut [TopLevel],
     function_names: HashMap<String, FunctionSymbol>,
     symbol_table: Vec<HashMap<String, VariableSymbol>>,
     diagnostics: Diagnostics,
@@ -119,7 +119,7 @@ pub struct SemanticAnalyzer<'a> {
 }
 
 impl<'a> SemanticAnalyzer<'a> {
-    pub fn from(program_tree: &'a [TopLevel]) -> Self {
+    pub fn from(program_tree: &'a mut [TopLevel]) -> Self {
         return Self {
             program_tree: program_tree,
             function_names: HashMap::new(),
@@ -146,10 +146,6 @@ impl<'a> SemanticAnalyzer<'a> {
             return self.diagnostics
         }
 
-        if let Some(mut function_symbol) = self.function_names.remove("entry") {
-            self.function_names.insert("main".to_string(), function_symbol);
-        }
-
         if self.diagnostics.has_fatal() {
             return self.diagnostics;
         }
@@ -160,15 +156,23 @@ impl<'a> SemanticAnalyzer<'a> {
     }
 
     fn collect_toplevels(&mut self) {
-        for toplevel in self.program_tree {
-            match &toplevel {
+        let mut errors: Vec<SemanticError> = Vec::new();
+
+        for toplevel in self.program_tree.iter_mut() {
+            match toplevel {
                 TopLevel::Function(function) => {
                     if let Some(existing) = self.function_names.get(&function.name) {
-                        self.push_error(SemanticError::DuplicateFunction {
+                        errors.push(SemanticError::DuplicateFunction {
                             name: function.name.clone(),
                             span: function.span
                         });
                     } else {
+                        if function.name == "main" {
+                            errors.push(SemanticError::MainIsReserved { span: function.span });
+                        } else if function.name == "entry" {
+                            function.name = "main".to_string();
+                        }
+
                         self.function_names.insert(function.name.clone(),
                         FunctionSymbol {
                             parameters: function.parameters.clone(),
@@ -179,11 +183,15 @@ impl<'a> SemanticAnalyzer<'a> {
                 },
 
                 TopLevel::Statement(statement) => {
-                    self.push_error(SemanticError::InvalidTopLevelStatement {
+                    errors.push(SemanticError::InvalidTopLevelStatement {
                         span: statement.span(),
                     });
                 }
             }
+        }
+
+        for error in errors {
+            self.push_error(error);
         }
     }
 
@@ -241,14 +249,16 @@ impl<'a> SemanticAnalyzer<'a> {
     }
 
     fn validate_tree(&mut self) {
-        for toplevel in self.program_tree {
-            match toplevel {
-                TopLevel::Function(function) => {
-                    self.validate_function(function);
-                },
-                _ => unreachable!("Invalid top-level nodes should have been caught earlier")
+        let mut program = std::mem::take(&mut self.program_tree);
+        // fuck you borrow checker
+
+        for toplevel in program.iter_mut() {
+            if let TopLevel::Function(function) = toplevel {
+                self.validate_function(function);
             }
         }
+        
+        self.program_tree = program;
     }
 
     fn validate_function(&mut self, function: &Function) {

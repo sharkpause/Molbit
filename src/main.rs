@@ -365,6 +365,8 @@ fn main() {
 
     println!("{}", output);
 
-    write_file("out.asm".to_string(), &output);
-    assemble_and_link("out.asm", "out");
+    write_file("out.ll".to_string(), &output);
+
+    // write_file("out.asm".to_string(), &output);
+    // assemble_and_link("out.asm", "out");
 }

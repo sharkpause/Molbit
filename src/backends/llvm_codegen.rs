@@ -6,15 +6,19 @@ use crate::backend::CodegenError;
 
 struct FunctionContext {
     return_type: Type,
-    entry_block: String,
-    current_block: String
+}
+
+#[derive(Clone)]
+struct VariableContext {
+    ssa_name: String,
+    var_type: Type
 }
 
 pub struct LLVMCodeGenerator {
     ssa_counter: usize,
     block_counter: usize,
     loop_stack: Vec<(String, String)>,
-    symbol_table: Vec<HashMap<String, String>>,
+    symbol_table: Vec<HashMap<String, VariableContext>>,
     indent_level: usize,
     current_function: Option<FunctionContext>
 }
@@ -45,34 +49,33 @@ impl LLVMCodeGenerator {
         self.symbol_table.pop().expect("Scope underflow");
     }
 
-    fn lookup_variable(&self, name: &str) -> Result<String, CodegenError> {
+    fn lookup_variable(&self, name: &str) -> Result<VariableContext, CodegenError> {
         for scope in self.symbol_table.iter().rev() {
-            if let Some(ssa_name) = scope.get(name) {
-                return Ok(ssa_name.clone());
+            if let Some(variable_context) = scope.get(name) {
+                return Ok(variable_context.clone());
             }
         }
         
         return Err(CodegenError::UndefinedVariable(String::from(name)));
     }
 
-    fn add_variable(&mut self, name: &str, value: &str) -> Result<(), CodegenError> {
+    fn add_variable(&mut self, name: &str, type_: Type, value: &str) -> Result<(), CodegenError> {
         let scope = self.symbol_table
             .last_mut()
             .expect("Semantic analysis guarantees there's always an active scope here");
 
-        scope.insert(name.to_string(), value.to_string());
+        scope.insert(name.to_string(), VariableContext {
+            ssa_name: value.to_string(),
+            var_type: type_
+        });
     
         return Ok(());
     }
 
-    fn map_function_type(&self, return_type: &Type) -> &'static str {
+    fn map_type(&self, return_type: &Type) -> &'static str {
         match return_type {
-            Type::Int64 => {
-                return "i64";
-            },
-            Type::Void => {
-                return "void";
-            }
+            Type::Int64 => return "i64",
+            Type::Void => return "void"
         }
     }
 
@@ -83,16 +86,19 @@ impl LLVMCodeGenerator {
             match toplevel {
                 TopLevel::Function(function) => {
                     self.enter_scope();
+                    self.current_function = Some(FunctionContext {
+                        return_type: function.return_type.clone()
+                    });
                     
                     output.push_str(&format!(
                         "{}define {} @{}(",
-                        self.indent(), self.map_function_type(&function.return_type), function.name
+                        self.indent(), self.map_type(&function.return_type), function.name
                     ));
 
                     let mut parameter_code = String::new();
                     if function.parameters.len() > 0 {                        
                         for (index, (type_, name)) in function.parameters.iter().enumerate() {
-                            let type_llvm = self.map_function_type(type_);
+                            let type_llvm = self.map_type(type_);
                             
                             if index > 0 {
                                 output.push_str(", ");
@@ -115,7 +121,7 @@ impl LLVMCodeGenerator {
                                 self.indent(), type_llvm, name, type_llvm, alloca_name
                             ));
 
-                            self.add_variable(name, &alloca_name);
+                            self.add_variable(name, type_.clone(), &alloca_name);
                         }
                     }
                     
@@ -125,6 +131,9 @@ impl LLVMCodeGenerator {
                     self.indent_level += 1;
 
                     output.push_str(&parameter_code);
+
+                    // the first Block needs to be handled specially by this method since arguments
+                    // need to be in the same scope as the body
                     output.push_str(&self.generate_function_body(function.body)?);
 
                     self.indent_level -= 1;
@@ -132,88 +141,106 @@ impl LLVMCodeGenerator {
 
                     self.exit_scope();
                 },
+
                 TopLevel::Statement(statement) => {
                     unreachable!("Semantic analysis guarantees statement is not allowed at the top level.");
                 }                
             }
-    //     }
-
+        }
         return Ok(output);
     }
 
-    // fn generate_function_body(&mut self, statement: Statement) -> Result<String, CodegenError> {
-    //     match statement {
-    //         Statement::Block{ statements } => {
-    //             let mut statements_code = String::new();
+    fn generate_function_body(&mut self, statement: Statement) -> Result<String, CodegenError> {
+        match statement {
+            Statement::Block{ statements, span } => {
+                let mut statements_code = String::new();
                 
-    //             for statement in statements {
-    //                 let statement_code = self.generate_statement(statement)?;
-    //                 statements_code.push_str(&statement_code);
-    //             }
+                for statement in statements {
+                    let statement_code = self.generate_statement(statement)?;
+                    statements_code.push_str(&statement_code);
+                }
 
-    //             return Ok(statements_code);
-    //         },
-    //         _ => {
-    //             return Err(CodegenError::GenericError)
-    //         }
-    //     }
-    // }
+                return Ok(statements_code);
+            },
+
+            _ => {
+                unreachable!("Function body should always be a block");
+            }
+        }
+    }
 
     fn generate_statement(&mut self, statement: Statement) -> Result<String, CodegenError> {
         match statement {
-            // Statement::Block{ statements} => {
-            //     self.enter_scope();
+            Statement::Block{ statements, span} => {
+                self.enter_scope();
 
-            //     let mut statements_code = String::new();
+                let mut statements_code = String::new();
                 
-            //     for statement in statements {
-            //         let statement_code = self.generate_statement(statement)?;
-            //         statements_code.push_str(&statement_code);
-            //     }
+                for statement in statements {
+                    let statement_code = self.generate_statement(statement)?;
+                    statements_code.push_str(&statement_code);
+                }
 
-            //     self.exit_scope();
-            //     return Ok(statements_code);
-            // },
+                self.exit_scope();
+                return Ok(statements_code);
+            },
+
             Statement::Return{ value: expression, span } => {
-                let (expression_code, expression_ssa) = self.generate_expression(&expression)?;
-            
-                let mut code = String::new();
+                let mut statement_code = String::new();
 
-                code.push_str(&expression_code);
-                code.push_str(&format!(
-                    "{}ret i64 {}\n",
-                    self.indent(),
-                    expression_ssa
+                match self.current_function.as_ref().expect("Function should be guaranteed to have a type").return_type {
+                    Type::Void => {
+                        statement_code.push_str(&format!("{}ret void\n", self.indent()));
+                    },
+                    _ => {
+                        let (expression_code, ssa_value) = self.generate_expression(&expression)?;
+
+                        statement_code.push_str(&expression_code);
+                        statement_code.push_str(&format!("{}ret i64 {}\n", self.indent(), ssa_value));
+                    }
+                }
+
+                return Ok(statement_code);
+            },
+            
+            Statement::VariableDeclare{ var_type, name: var_name , initializer, span } => {
+                let mut statement_code = String::new();
+                
+                let ssa_name = &format!("%{}.addr", var_name);
+                statement_code.push_str(&format!(
+                    "{}{} = alloca {}\n",
+                    self.indent(), ssa_name, self.map_type(&var_type)
                 ));
 
-                return Ok(code);
+                let (expression_code, expression_ssa) = self.generate_expression(&initializer)?;
+
+                statement_code.push_str(&expression_code);
+                statement_code.push_str(&format!(
+                    "{}store {} {}, {}* {}\n",
+                    self.indent(), self.map_type(&var_type), expression_ssa, self.map_type(&var_type), ssa_name
+                ));
+
+                self.add_variable(&var_name, var_type, ssa_name);
+
+                return Ok(statement_code);
             },
-            // Statement::VariableDeclare{ var_type, name: var_name , initializer: expression } => {
-            //     let stack_offset;
-                
-            //     match var_type {
-            //         Type::Int => {
-            //             self.stack_size += 8;
-            //             stack_offset = self.stack_size - 8;
-            //         }
-            //     }
-
-            //     let current_scope = self.symbol_table.last_mut().expect("No active scope");
-
-            //     current_scope.insert(format!("{}", var_name), stack_offset);
-
-            //     output.push_str(&self.generate_expression(&expression)?);
-            //     output.push_str(&format!("\tmov [rbp - {}], rax\n", stack_offset));
-            //     return Ok(output);
-            // },
-            // Statement::VariableAssignment{ name, value: expression } => {
-            //     let offset = self.lookup_variable(&name)?;
             
-            //     output.push_str(&self.generate_expression(&expression)?);
-            //     output.push_str(&format!("\tmov [rbp - {}], rax\n", offset));
+            Statement::VariableAssignment{ name, value, span } => {
+                let mut statement_code = String::new();
+                
+                let pointer = self.lookup_variable(&name)?;
 
-            //     return Ok(output);
-            // },
+                let (expression_code, expression_ssa) = self.generate_expression(&value)?;
+
+                statement_code.push_str(&expression_code);
+                statement_code.push_str(&format!(
+                    "{}store {} {}, {}* {}\n",
+                    self.indent(), self.map_type(&pointer.var_type), expression_ssa, self.map_type(&pointer.var_type), pointer.ssa_name
+                ));
+
+                return Ok(statement_code);
+            },
+
             // Statement::Expression{ expression } => {
             //     let output = self.generate_expression(&expression)?;
 
@@ -286,7 +313,7 @@ impl LLVMCodeGenerator {
 
     fn generate_expression(&mut self, expression: &Expression) -> Result<(String, String), CodegenError> {
         match expression {
-            Expression::IntLiteral { value, span } => {
+            Expression::IntLiteral64 { value, span } => {
                 let ssa = format!("%{}", self.ssa_counter);
                 let code = format!(
                     "{}{} = add i64 0, {}\n",
@@ -296,19 +323,21 @@ impl LLVMCodeGenerator {
                 self.ssa_counter += 1;
                 return Ok((code, ssa));
             },
+
             Expression::Variable { name, span } => {
                 let variable_pointer = self.lookup_variable(name)?;
 
                 let ssa = format!("%{}", self.ssa_counter);
                 let code = format!(
                     "{}{} = load i64, i64* {}\n",
-                    self.indent(), ssa, variable_pointer
+                    self.indent(), ssa, variable_pointer.ssa_name
                 );
 
                 self.ssa_counter += 1;
             
                 return Ok((code, ssa));
             },
+
             Expression::BinaryOperation { left, operator, right, span } => {
                 let (left_code, left_ssa) = self.generate_expression(left)?;
                 let (right_code, right_ssa) = self.generate_expression(right)?;
@@ -339,6 +368,11 @@ impl LLVMCodeGenerator {
 
                 return Ok((code, ssa));
             },
+
+            Expression::UnaryOperation { operator, operand, span } => {
+                todo!("implement this shit");
+            }
+
             _ => {
                 return Err(CodegenError::UnknownExpression);
             }
@@ -473,9 +507,7 @@ impl LLVMCodeGenerator {
         // }
 
         // return Ok(output);
-        }
     }
-
 }
 
 impl Backend for LLVMCodeGenerator {

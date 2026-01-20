@@ -332,8 +332,8 @@ impl Parser {
             let parameter_name = self.expect_identifier()?;
             parameters.push((parameter_type, parameter_name));
         
-            if let Some(tok) = self.peek_token(0) {
-                if tok.same_kind(&TokenKind::Comma) {
+            if let Some(token) = self.peek_token(0) {
+                if token.same_kind(&TokenKind::Comma) {
                     self.consume_token();
                 }
             }
