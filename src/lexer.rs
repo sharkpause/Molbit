@@ -249,7 +249,7 @@ impl Lexer {
                     }
                 }
 
-                let number: i64 = token.parse().map_err(|_| LexerError::UnexpectedChar {
+                let number = token.parse().map_err(|_| LexerError::UnexpectedChar {
                     character: token.chars().last().unwrap_or(' '),
                     line: start_line,
                     column: start_column
@@ -276,8 +276,9 @@ impl Lexer {
                 let kind = match token.as_str() {
                     "return" => TokenKind::Return,
                     "function" => TokenKind::Function,
-                    "int" => TokenKind::IntType,
-                    "void" => TokenKind::Void,
+                    "int32" => TokenKind::Int32Type,
+                    "int64" => TokenKind::Int64Type,
+                    "void" => TokenKind::VoidType,
                     "var" => TokenKind::Var,
                     "if" => TokenKind::If,
                     "else" => TokenKind::Else,

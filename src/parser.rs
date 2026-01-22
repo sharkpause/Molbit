@@ -98,8 +98,8 @@ pub enum Expression {
         span: Span,
     },
 
-    IntLiteral64 {
-        value: i64,
+    IntLiteral {
+        value: i128,
         span: Span,
     },
 
@@ -139,7 +139,9 @@ impl Expression {
 
 #[derive(Debug, Clone)]
 pub enum Type {
+    Int32,
     Int64,
+    GenericInt, // For integer literals
     Void
 }
 
@@ -150,6 +152,21 @@ impl Type {
 
     pub fn is_void(&self) -> bool {
         return discriminant(self) == discriminant(&Type::Void );
+    }
+
+    pub fn is_integer(&self) -> bool {
+        return matches!(
+            self,
+            Type::Int32 | Type::Int64 | Type::GenericInt
+        );
+    }
+
+    pub fn is_assignable_to(&self, other: &Type) -> bool {
+        match (self, other) {
+            (Type::GenericInt, t) if t.is_integer() => true,
+            (t, Type::GenericInt) if t.is_integer() => true,
+            (a, b) => a.same_kind(b)
+        }
     }
 }
 
@@ -218,11 +235,15 @@ impl Parser {
             .ok_or(ParserError::UnexpectedEndOfInput)?;
 
         match &token.kind {
-            TokenKind::IntType => {
+            TokenKind::Int32Type => {
+                self.consume_token();
+                return Ok(Type::Int32);
+            },
+            TokenKind::Int64Type => {
                 self.consume_token();
                 return Ok(Type::Int64);
             },
-            TokenKind::Void => {
+            TokenKind::VoidType => {
                 self.consume_token();
                 return Ok(Type::Void);
             }
@@ -573,13 +594,13 @@ impl Parser {
             },
 
             TokenKind::IntLiteral(number) => {
-                let value = *number; // copy the i64
+                let value = *number;
                 self.consume_token();
                 
-                Expression::IntLiteral64 { value, span }
+                Expression::IntLiteral { value, span }
             },
 
-            TokenKind::Void => {
+            TokenKind::VoidType => {
                 self.consume_token();
                 Expression::Null { span }
             },

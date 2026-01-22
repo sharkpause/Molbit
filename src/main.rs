@@ -127,7 +127,7 @@ fn print_expression(expr: &Expression, indent: usize) {
             println!("{}Variable {}", padding, name);
         }
 
-        Expression::IntLiteral64 { value, span } => {
+        Expression::IntLiteral { value, span } => {
             println!("{}Int {}", padding, value);
         },
 
@@ -280,8 +280,53 @@ pub fn print_semantic_errors(diagnostics: &Diagnostics) {
                     span.line, span.column, var_name, var_type
                 )
             },
+
+            SemanticError::InvalidEntryReturnType { span } => {
+                eprintln!(
+                    "Semantic error at {}:{}, entry function's return type must be int32",
+                    span.line, span.column
+                )
+            },
+
+            SemanticError::IntegerOverflow { span } => {
+                eprintln!(
+                    "Semantic error at {}:{}, an integer overflow occurred",
+                    span.line, span.column
+                )
+            }
         }
     }
+}
+
+fn llvm_optimize_and_link(ll_path: &str, output_exe: &str) {
+    let opt_status = Command::new("opt")
+        .args(["-O2", ll_path, "-o", "out.opt.ll"])
+        .status()
+        .expect("Failed to run opt");
+
+    if !opt_status.success() {
+        panic!("LLVM optimization failed");
+    }
+
+    let llc_status = Command::new("llc")
+        .args(["out.opt.ll", "-filetype=obj", "-o", "out.o"])
+        .status()
+        .expect("Failed to run llc");
+
+    if !llc_status.success() {
+        panic!("LLVM code generation failed");
+    }
+
+    let clang_status = Command::new("clang")
+        .args(["out.o", "-o", output_exe])
+        .status()
+        .expect("Failed to run clang");
+
+    if !clang_status.success() {
+        panic!("Linking failed");
+    }
+
+    println!("Executable '{}' produced", output_exe);
 }
 
 fn main() {
@@ -366,6 +411,7 @@ fn main() {
     println!("{}", output);
 
     write_file("out.ll".to_string(), &output);
+    llvm_optimize_and_link("out.ll", "out");
 
     // write_file("out.asm".to_string(), &output);
     // assemble_and_link("out.asm", "out");

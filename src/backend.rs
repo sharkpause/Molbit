@@ -7,7 +7,7 @@ pub enum CodegenError {
     InvalidBreak,
     InvalidContinue,
     UnknownExpression,
-    UnknownStatement
+    UnknownStatement,
 }
 
 pub trait Backend {

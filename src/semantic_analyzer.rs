@@ -64,6 +64,12 @@ pub enum SemanticError {
         var_type: Type,
         span: Span
     },
+    InvalidEntryReturnType {
+        span: Span
+    },
+    IntegerOverflow {
+        span: Span
+    },
 
     // ------- Fatal errors ---------
     
@@ -141,11 +147,6 @@ impl<'a> SemanticAnalyzer<'a> {
             return self.diagnostics;
         }
 
-        self.validate_entry_functions();
-        if self.diagnostics.has_fatal() {
-            return self.diagnostics
-        }
-
         if self.diagnostics.has_fatal() {
             return self.diagnostics;
         }
@@ -195,15 +196,15 @@ impl<'a> SemanticAnalyzer<'a> {
         }
     }
 
-    fn validate_entry_functions(&mut self) {
-        if !self.function_exists("entry") {
-            self.push_error(SemanticError::NoEntryFunction);
-        }
+    // fn validate_entry_functions(&mut self) {
+    //     if !self.function_exists("entry") {
+    //         self.push_error(SemanticError::NoEntryFunction);
+    //     }
         
-        if let Some(main_function_span) = self.function_names.get("main") {
-            self.push_error(SemanticError::MainIsReserved { span: main_function_span.span });
-        }
-    }
+    //     if let Some(main_function_span) = self.function_names.get("main") {
+    //         self.push_error(SemanticError::MainIsReserved { span: main_function_span.span });
+    //     }
+    // }
 
     fn enter_scope(&mut self) {
         self.symbol_table.push(HashMap::new());
@@ -252,8 +253,8 @@ impl<'a> SemanticAnalyzer<'a> {
         let mut program = std::mem::take(&mut self.program_tree);
         // this is needed because this it needs to iterate through self.program_tree, so
         // two errors can occur: A multiple mutable borrow and a mutable borrow after an immutable borrow
-        // this fixes that error because self.program_tree now is moved, no need for a borrow
-        // fuck you borrow checker
+        // this fixes that error because self.program_tree now is moved, no need for a borrow.
+        // fuck you borrow checker.
 
         for toplevel in program.iter_mut() {
             if let TopLevel::Function(function) = toplevel {
@@ -266,6 +267,10 @@ impl<'a> SemanticAnalyzer<'a> {
 
     fn validate_function(&mut self, function: &Function) {
         self.current_return_type = function.return_type.clone();
+
+        if function.name == "main" && !self.current_return_type.same_kind(&Type::Int32) {
+            self.push_error(SemanticError::InvalidEntryReturnType { span: function.span });
+        }
 
         self.enter_scope();
 
@@ -346,7 +351,7 @@ impl<'a> SemanticAnalyzer<'a> {
                                 var_type: Type::Void,
                                 span: *span
                             });
-                        } else if !var_symbol.var_type.same_kind(&value_type) {
+                        } else if !var_symbol.var_type.is_assignable_to(&value_type) {
                             self.push_error(SemanticError::MismatchedVariableType {
                                 name: name.clone(),
                                 expected_type: var_symbol.var_type.clone(),
@@ -368,7 +373,7 @@ impl<'a> SemanticAnalyzer<'a> {
                             var_type: Type::Void,
                             span: *span
                         });
-                    } else if !var_type.same_kind(&init_type) {
+                    } else if !var_type.is_assignable_to(&init_type) {
                         self.push_error(SemanticError::MismatchedVariableType {
                             name: name.clone(),
                             expected_type: var_type.clone(),
@@ -394,8 +399,14 @@ impl<'a> SemanticAnalyzer<'a> {
 
     fn infer_expression_type(&mut self, expression: &Expression) -> Option<Type> {
         match expression {
-            Expression::IntLiteral64 { value, span } => {
-                return Some(Type::Int64);
+            Expression::IntLiteral { value, span } => {
+                if *value < i128::MIN || *value > i128::MAX {
+                    self.push_error(SemanticError::IntegerOverflow { span: *span });
+
+                    return None;
+                }
+
+                return Some(Type::GenericInt);
             },
 
             Expression::Null { span } => {
@@ -472,7 +483,7 @@ impl<'a> SemanticAnalyzer<'a> {
                 self.validate_expression(operand);
             },
 
-            Expression::IntLiteral64 { value, span } => {
+            Expression::IntLiteral { value, span } => {
                 // yes
             },
 

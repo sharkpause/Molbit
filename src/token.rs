@@ -10,14 +10,15 @@ pub struct Token {
 #[derive(Debug, Clone)]
 pub enum TokenKind {
     Return,
-    IntLiteral(i64),
+    IntLiteral(i128),
     Semicolon,
     LeftBrace,
     RightBrace,
     LeftParentheses,
     RightParentheses,
     Function,
-    IntType,
+    Int32Type,
+    Int64Type,
     Identifier(String),
     Plus,
     Minus,
@@ -40,7 +41,7 @@ pub enum TokenKind {
     Not,
     Break,
     Continue,
-    Void
+    VoidType
 }
 
 impl Token {
