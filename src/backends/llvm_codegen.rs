@@ -195,7 +195,7 @@ impl LLVMCodeGenerator {
                     statement_code.push_str(&format!("{}ret void\n", self.indent()));
                 }
 
-                let (expression_code, ssa_value) = self.generate_expression(&expression, &return_type)?;
+                let (expression_code, ssa_value) = self.generate_expression(&expression, Some(&return_type))?;
 
                 statement_code.push_str(&expression_code);
                 statement_code.push_str(&format!("{}ret {} {}\n", self.indent(), self.map_type(&return_type), ssa_value));
@@ -212,7 +212,7 @@ impl LLVMCodeGenerator {
                     self.indent(), ssa_name, self.map_type(&var_type)
                 ));
 
-                let (expression_code, expression_ssa) = self.generate_expression(&initializer, &var_type)?;
+                let (expression_code, expression_ssa) = self.generate_expression(&initializer, Some(&var_type))?;
 
                 statement_code.push_str(&expression_code);
                 statement_code.push_str(&format!(
@@ -228,24 +228,26 @@ impl LLVMCodeGenerator {
             Statement::VariableAssignment{ name, value, span } => {
                 let mut statement_code = String::new();
                 
-                let pointer = self.lookup_variable(&name)?;
+                let var_context = self.lookup_variable(&name)?;
 
-                let (expression_code, expression_ssa) = self.generate_expression(&value, &pointer.var_type)?;
+                let (expression_code, expression_ssa) =
+                    self.generate_expression(&value, Some(&var_context.var_type))?;
 
                 statement_code.push_str(&expression_code);
                 statement_code.push_str(&format!(
                     "{}store {} {}, {}* {}\n",
-                    self.indent(), self.map_type(&pointer.var_type), expression_ssa, self.map_type(&pointer.var_type), pointer.ssa_name
+                    self.indent(), self.map_type(&var_context.var_type), expression_ssa, self.map_type(&var_context.var_type), var_context.ssa_name
                 ));
 
                 return Ok(statement_code);
             },
 
-            // Statement::Expression{ expression } => {
-            //     let output = self.generate_expression(&expression)?;
+            Statement::Expression{ expression, span } => {
+                let output = self.generate_expression(&expression, None)?;
 
-            //     return Ok(output);
-            // },
+                return Ok(output.0);
+            },
+
             // Statement::If{ condition: expression, then_branch: body, else_branch: else_ } => {
             //     let mut output = self.generate_expression(&expression)?;
                 
@@ -311,10 +313,11 @@ impl LLVMCodeGenerator {
         }
     }
 
-    fn generate_expression(&mut self, expression: &Expression, expected_type: &Type) -> Result<(String, String), CodegenError> {
+    fn generate_expression(&mut self, expression: &Expression, expected_type: Option<&Type>) -> Result<(String, String), CodegenError> {
         match expression {
             Expression::IntLiteral { value, span } => {
-                let ssa_type = match expected_type {
+                let some_expected_type = expected_type.expect("An expected type must be passed at this point");
+                let ssa_type = match some_expected_type {
                     Type::Int32 => "i32",
                     Type::Int64 => "i64",
                     _ => {
@@ -332,7 +335,7 @@ impl LLVMCodeGenerator {
                 return Ok((code, ssa));
             },
 
-            Expression::Variable { name, span } => {
+            Expression::Variable { name, type_, span } => {
                 let variable_pointer = self.lookup_variable(name)?;
                 let ssa_type = self.map_type(&variable_pointer.var_type);
 
@@ -346,6 +349,42 @@ impl LLVMCodeGenerator {
             
                 return Ok((code, ssa));
             },
+
+            Expression::FunctionCall { called, arguments, span } => {
+                let mut code = String::new();
+                let mut argument_ssas: Vec<String> = Vec::new();
+
+                for argument in arguments {
+                    println!("\n\n{:?}\n\n", argument);
+                    let generated_expression = self.generate_expression(argument, expected_type)?;
+                
+                    code.push_str(&generated_expression.0);
+                    argument_ssas.push(generated_expression.1);
+                }
+
+                let Expression::Variable { name: function_name, type_: return_type, span } = called.as_ref()
+                    else { unreachable!("Expression is guaranteed to be a variable") };
+
+                let argument_code = argument_ssas
+                    .into_iter()
+                    .map(|ssa| format!("{}", ssa))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let function_call_ssa = format!("%{}", function_name);
+
+                match return_type {
+                    Some(type_) => {
+                        code.push_str(&format!(
+                            "{}{} = call {} @{}({})",
+                            self.indent(), function_call_ssa, self.map_type(type_), function_name, argument_code
+                        ));
+                    },
+                    None => unreachable!("Return type is guaranteed")
+                }
+
+                return Ok((code, function_call_ssa));
+            }
 
             Expression::BinaryOperation { left, operator, right, span } => {
                 let (left_code, left_ssa) = self.generate_expression(left, expected_type)?;
@@ -380,11 +419,23 @@ impl LLVMCodeGenerator {
 
             Expression::UnaryOperation { operator, operand, span } => {
                 todo!("implement this shit");
-            }
+            },
 
-            _ => {
-                return Err(CodegenError::UnknownExpression);
-            }
+            Expression::Null { span } => {
+                todo!("implement ts");
+            },
+
+            Expression::IntLiteral32 { value, span } => {
+                todo!("Implement ts");
+            },
+
+            Expression::IntLiteral64 { value, span } => {
+                todo!("Implement ts");
+            },
+
+            // _ => {
+            //     return Err(CodegenError::UnknownExpression);
+            // }
         }
         
         // let mut output = String::new();

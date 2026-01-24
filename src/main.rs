@@ -123,8 +123,8 @@ fn print_expression(expr: &Expression, indent: usize) {
     let padding = "  ".repeat(indent);
 
     match expr {
-        Expression::Variable { name, span } => {
-            println!("{}Variable {}", padding, name);
+        Expression::Variable { name, type_, span } => {
+            println!("{}Variable {} of type {:?}", padding, name, type_);
         }
 
         Expression::IntLiteral { value, span } => {
@@ -157,6 +157,14 @@ fn print_expression(expr: &Expression, indent: usize) {
 
         Expression::Null { span } => {
             println!("{}Null", padding);
+        }
+
+        Expression::IntLiteral32 { value, span } => {
+            println!("{} Int32 {}", padding, value);
+        },
+
+        Expression::IntLiteral64 { value, span } => {
+            println!("{} Int64 {}", padding, value);
         }
     }
 }
@@ -293,6 +301,13 @@ pub fn print_semantic_errors(diagnostics: &Diagnostics) {
                     "Semantic error at {}:{}, an integer overflow occurred",
                     span.line, span.column
                 )
+            },
+
+            SemanticError::MismatchedArgumentType { expected_type, provided_type, span } => {
+                eprintln!(
+                    "Semantic error at {}:{}, provided argument type of {:?} did not match expected type of {:?}",
+                    span.line, span.column, provided_type, expected_type
+                )
             }
         }
     }
@@ -384,7 +399,7 @@ fn main() {
     for toplevel in &program_tree {
         match toplevel {
             TopLevel::Function(f) => {
-                println!("Function: {}, Return Type: {:?}", f.name, f.return_type);
+                println!("Function: {}, Return Type: {:?}, Parameters: {:?}", f.name, f.return_type, f.parameters);
                 print_statement(&f.body, 1);
             }
             TopLevel::Statement(s) => print_statement(&s, 1),
@@ -397,6 +412,17 @@ fn main() {
     if diagnostics.has_errors() {
         print_semantic_errors(&diagnostics);
         return;
+    }
+
+    println!("\nAST After semantic analysis:");
+    for toplevel in &program_tree {
+        match toplevel {
+            TopLevel::Function(f) => {
+                println!("Function: {}, Return Type: {:?}, Parameters: {:?}", f.name, f.return_type, f.parameters);
+                print_statement(&f.body, 1);
+            }
+            TopLevel::Statement(s) => print_statement(&s, 1),
+        }
     }
 
     let mut codegen_backend = LLVMCodeGenerator::default();
@@ -416,3 +442,6 @@ fn main() {
     // write_file("out.asm".to_string(), &output);
     // assemble_and_link("out.asm", "out");
 }
+
+// TODO: Rename project name from molbit to something else
+// Current pick: Nexus

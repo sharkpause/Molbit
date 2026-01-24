@@ -95,12 +95,23 @@ impl Statement {
 pub enum Expression {
     Variable {
         name: String,
+        type_: Option<Type>,
         span: Span,
     },
 
     IntLiteral {
         value: i128,
         span: Span,
+    },
+    
+    IntLiteral32 {
+        value: i32,
+        span: Span
+    },
+
+    IntLiteral64 {
+        value: i64,
+        span: Span
     },
 
     BinaryOperation {
@@ -568,7 +579,7 @@ impl Parser {
                 self.consume_token();
                     
                 if !self.peek_token(0).map_or(false, |token| token.same_kind(&TokenKind::LeftParentheses)) {
-                    Expression::Variable { name, span }
+                    Expression::Variable { name, span, type_: None }
                 } else {
                     self.consume_token(); // consume '('
                     let mut arguments = Vec::new();
@@ -586,7 +597,7 @@ impl Parser {
                     self.expect_token(&TokenKind::RightParentheses)?;
                 
                     Expression::FunctionCall {
-                        called: Box::new(Expression::Variable { name, span }),
+                        called: Box::new(Expression::Variable { name, span, type_: None }),
                         arguments,
                         span
                     }

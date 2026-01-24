@@ -70,6 +70,11 @@ pub enum SemanticError {
     IntegerOverflow {
         span: Span
     },
+    MismatchedArgumentType {
+        expected_type: Type,
+        provided_type: Type,
+        span: Span
+    },
 
     // ------- Fatal errors ---------
     
@@ -224,10 +229,10 @@ impl<'a> SemanticAnalyzer<'a> {
         }
     }
 
-    fn variable_exists(&mut self, name: &String, span: &Span) {
+    fn variable_exists(&mut self, name: &String, span: &Span) -> bool {
         for scope in self.symbol_table.iter().rev() {
             if scope.contains_key(name) {
-                return;
+                return false;
             }
         }
 
@@ -235,6 +240,7 @@ impl<'a> SemanticAnalyzer<'a> {
             name: name.clone(),
             span: span.clone(),
         });
+        return true;
     }
 
     fn lookup_variable(&self, name: &String) -> Option<&VariableSymbol> {
@@ -265,7 +271,7 @@ impl<'a> SemanticAnalyzer<'a> {
         self.program_tree = program;
     }
 
-    fn validate_function(&mut self, function: &Function) {
+    fn validate_function(&mut self, function: &mut Function) {
         self.current_return_type = function.return_type.clone();
 
         if function.name == "main" && !self.current_return_type.same_kind(&Type::Int32) {
@@ -278,7 +284,7 @@ impl<'a> SemanticAnalyzer<'a> {
             self.add_variable(name.clone(), function.return_type.clone(), function.span);
         }
 
-        if let Statement::Block { statements, .. } = &function.body {
+        if let Statement::Block { statements, .. } = &mut function.body {
             for statement in statements {
                 self.validate_statement(statement);
             }
@@ -289,13 +295,13 @@ impl<'a> SemanticAnalyzer<'a> {
         self.exit_scope();
     }
 
-    fn validate_statement(&mut self, statement: &Statement) {
+    fn validate_statement(&mut self, statement: &mut Statement) {
         match statement {
             Statement::Return { value, span } => {
                 self.validate_expression(value);
                 
                 if let Some(value_type) = self.infer_expression_type(value) {
-                    if !value_type.same_kind(&self.current_return_type) {
+                    if !value_type.is_assignable_to(&self.current_return_type) {
                         self.push_error(SemanticError::MismatchedReturnType {
                             expected_return_type: self.current_return_type.clone(),
                             provided_return_type: value_type,
@@ -414,13 +420,13 @@ impl<'a> SemanticAnalyzer<'a> {
             }
 
             Expression::FunctionCall { called, arguments, span } => {
-                let Expression::Variable { name: called_function_name, span: function_span } = called.as_ref()
+                let Expression::Variable { name: called_function_name, type_, span: function_span } = called.as_ref()
                     else { unreachable!("Parser guarantees called is a variable") };
                 
                 return Some(self.lookup_function(called_function_name)?.return_type.clone());
             },
 
-            Expression::Variable { name, span } => {
+            Expression::Variable { name, type_, span } => {
                 return Some(self.lookup_variable(name)?.var_type.clone());
             },
 
@@ -433,50 +439,102 @@ impl<'a> SemanticAnalyzer<'a> {
                 let left_type = self.infer_expression_type(left)?;
                 let right_type = self.infer_expression_type(right)?;
 
-                if left_type.same_kind(&right_type) {
+                if left_type.is_assignable_to(&right_type) {
+                // if left_type.same_kind(&right_type) {
                     return Some(left_type);
                 } else {
                     self.push_error(SemanticError::MismatchedBinaryOperationType { left_type, right_type, span: *span });
                     return None;
                 }
             },
+
+            Expression::IntLiteral32 { value, span } => {
+                return Some(Type::Int32);
+            },
+            
+            Expression::IntLiteral64 { value, span } => {
+                return Some(Type::Int64);
+            }
         }
     }
 
-    fn validate_expression(&mut self, expression: &Expression) {
+    // Returns true if an error occurred, false if success.
+    fn validate_expression(&mut self, expression: &mut Expression) -> Result<(), ()> {
         match expression {
-            Expression::Variable { name, span } => {
-                self.variable_exists(name, span);
+            Expression::Variable { name, type_, span } => {
+                if self.variable_exists(name, span) {
+                    return Err(());
+                }
+                
+                if let None = type_ {
+                    let var_type = self.lookup_variable(name).expect("Variable is guaranteed to exist").var_type.clone();
+                    *type_ = Some(var_type);
+                }
             },
 
             Expression::FunctionCall { called, arguments, span } => {
-                let Expression::Variable { name: called_function_name, span: function_span } = called.as_ref()
+                let Expression::Variable { name: called_function_name, type_: called_type, span: function_span } =
+                    called.as_ref()
                     else { unreachable!("Parser guarantees called is a variable") };
                 
-                if let Some(called_function) = self.lookup_function(called_function_name) {
-                    if called_function.parameters.len() != arguments.len() {
-                        self.push_error(SemanticError::MismatchedArgumentCount {
-                            called_function_name: called_function_name.clone(),
-                            provided_argument_count: arguments.len(),
-                            expected_argument_count: called_function.parameters.len(),
-                            span: *span,
+                let called_function = match self.lookup_function(called_function_name) {
+                    Some(f) => f,
+                    None => {
+                        self.push_error(SemanticError::UndefinedFunction {
+                            name: called_function_name.clone(),
+                            span: *function_span,
                         });
+                        return Err(());
                     }
-                } else {
-                    self.push_error(SemanticError::UndefinedFunction {
-                        name: called_function_name.clone(),
-                        span: *function_span,
+                };
+
+                if called_function.parameters.len() != arguments.len() {
+                    self.push_error(SemanticError::MismatchedArgumentCount {
+                        called_function_name: called_function_name.clone(),
+                        provided_argument_count: arguments.len(),
+                        expected_argument_count: called_function.parameters.len(),
+                        span: *span,
                     });
+                    return Err(());
                 }
 
-                for argument in arguments {
-                    self.validate_expression(argument);
+                let expected_params = called_function.parameters.clone();
+
+                for (provided_argument, expected_argument) in
+                    arguments.iter_mut().zip(expected_params.iter())
+                {
+                    self.validate_expression(provided_argument)?;
+
+                    self.validate_argument(provided_argument, expected_argument);
+                }
+
+                // A rematch is needed because a infer_expression_type borrows expression as immutable
+                // But then to reassign called_type, expression needs to be mutable.
+                // A rematch fixes this by just creating a completely new borrow of expression where it's always mutable.
+                let inferred_type = self.infer_expression_type(expression);
+                match expression {
+                    Expression::FunctionCall { called, arguments, span } => {
+                        let Expression::Variable {
+                            name: called_function_name,
+                            type_: called_type,
+                            span: function_span } = called.as_mut()
+                            else { unreachable!("Parser guarantees called is a variable") };
+
+                        *called_type = inferred_type;
+                    },
+                    _ => unreachable!(),
                 }
             },
 
             Expression::BinaryOperation { left, operator, right, span } => {
                 self.validate_expression(left);
                 self.validate_expression(right);
+
+                if let None = self.infer_expression_type(&expression)  {
+                    return Err(());
+                }
+
+
             },
 
             Expression::UnaryOperation { operator, operand, span } => {
@@ -487,9 +545,96 @@ impl<'a> SemanticAnalyzer<'a> {
                 // yes
             },
 
+            Expression::IntLiteral32 { value, span } => {
+                // yes
+            },
+
+            Expression::IntLiteral64 { value, span } => {
+                // yes
+            },
+
             Expression::Null { span } => {
                 // yes
             }
         }
+
+        return Ok(());
+    }
+
+    // Returns true is an error occurred, false if success.
+    fn validate_argument(&mut self, provided_argument: &mut Expression, expected_argument: &(Type, String)) -> Result<(), ()> {
+        match provided_argument {
+            Expression::IntLiteral { value, span } => {
+                if !expected_argument.0.is_assignable_to(&Type::GenericInt) {
+                    self.push_error(SemanticError::MismatchedArgumentType {
+                        expected_type: expected_argument.0.clone(),
+                        provided_type: Type::GenericInt,
+                        span: *span
+                    });
+                    return Err(());
+                }
+
+                *provided_argument = match &expected_argument.0 {
+                    Type::Int32 => Expression::IntLiteral32 { value: *value as i32, span: *span },
+                    Type::Int64 => Expression::IntLiteral64 { value: *value as i64, span: *span },
+                    _ => unreachable!("Should only be integer types here")
+                };
+            },
+
+            Expression::Variable { name, type_, span } => {
+                let var_type = type_.as_ref().expect("Type should be guaranteed here");
+                
+                if !expected_argument.0.is_assignable_to(&var_type) {
+                    self.push_error(SemanticError::MismatchedArgumentType {
+                        expected_type: expected_argument.0.clone(),
+                        provided_type: var_type.clone(),
+                        span: *span
+                    });
+                    return Err(());
+                }
+            },
+
+            Expression::BinaryOperation { left, operator, right, span } => {
+                self.validate_argument(left, expected_argument)?;
+                self.validate_argument(right, expected_argument)?;
+            },
+
+            Expression::FunctionCall { called, arguments, span } => {
+                let Expression::Variable { name: called_function_name, type_: called_type, span: function_span } =
+                    called.as_ref()
+                    else { unreachable!("Parser guarantees called is a variable") };
+
+                if let Some(some_called_type) = called_type {
+                    if !some_called_type.is_assignable_to(&expected_argument.0) {
+                        self.push_error(SemanticError::MismatchedArgumentType {
+                            expected_type: expected_argument.0.clone(),
+                            provided_type: some_called_type.clone(),
+                            span: *span
+                        });
+                        return Err(());
+                    }
+                }
+
+                self.validate_expression(provided_argument)?;
+            },
+
+            Expression::UnaryOperation { operator, operand, span } => {
+todo!("implemnet ts");
+            },
+
+            Expression::IntLiteral32 { value, span } => {
+todo!("implemnet ts");
+            },
+
+            Expression::IntLiteral64 { value, span } => {
+                todo!("implemnet ts");
+            },
+
+            Expression::Null { span } => {
+todo!("implemnet ts");
+            }
+        }
+
+        return Ok(());
     }
 }
